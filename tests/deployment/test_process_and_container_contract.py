@@ -85,8 +85,10 @@ def test_container_and_rollback_files_enforce_release_safety() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     production = (ROOT / "deploy" / "compose.production.yml").read_text(encoding="utf-8")
     rollback = (ROOT / "scripts" / "deploy" / "rollback.ps1").read_text(encoding="utf-8")
+    acceptance = (ROOT / "scripts" / "deploy" / "acceptance.ps1").read_text(encoding="utf-8")
     assert "FROM python:3.12.13-slim-bookworm@sha256:" in dockerfile
     assert "USER 10001:10001" in dockerfile
+    assert "mkdir -p /var/lib/quant-agent/data /var/lib/quant-agent/audit" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "read_only: true" in production
     assert "no-new-privileges:true" in production
@@ -95,3 +97,5 @@ def test_container_and_rollback_files_enforce_release_safety() -> None:
     assert "command.downgrade" not in rollback.casefold()
     assert "audit volume retained" in rollback
     assert "Rollback image did not become healthy." in rollback
+    assert "deployment_acceptance_marker" in acceptance
+    assert "at least one persisted audit record" in acceptance

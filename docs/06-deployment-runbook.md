@@ -19,8 +19,10 @@
 - 已通过当前提交的 CI；
 - 发布人、审批人和 RiskAdmin 已明确。
 
-当前开发机未安装 Docker，因此本阶段已经完成本地进程、迁移、健康检查和回滚契约
-测试，但容器构建与 Compose 验收仍需在 Docker 主机执行。
+当前开发机已在 `D:\DevelopTool\Docker` 安装 Docker Desktop 4.84.0，使用 WSL 2
+Linux Engine 29.6.2 和 Docker Compose 5.3.1；WSL 数据盘位于
+`D:\DevelopTool\Docker\wsl-data`。P8-T05 已完成本地进程、迁移、容器构建、
+Compose 部署、健康检查和失败回滚验收。
 
 ## 3. 构建不可变镜像
 
@@ -65,8 +67,8 @@ $env:QUANT_AGENT_DATABASE_URL = '<由密钥服务注入>'
   -PreviousImage 'registry.example/quant-agent@sha256:<前一摘要>'
 ```
 
-验收脚本会停止候选进程模拟故障，启动前一不可变镜像，并确认服务恢复且审计记录数
-没有减少。
+验收脚本会先追加专用审计标记，再停止候选进程模拟故障，启动前一不可变镜像，
+并确认服务恢复、回滚前至少存在一条审计记录且回滚后记录数没有减少。
 
 ## 6. 生产发布
 

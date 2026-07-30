@@ -15,10 +15,19 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Candidate test deployment failed.'
 }
 
+$auditMarker = docker compose --file $composeFile exec -T api python -c `
+    "from pathlib import Path; import json; p=Path('/var/lib/quant-agent/audit/events.jsonl'); p.parent.mkdir(parents=True, exist_ok=True); print(p.open('a', encoding='utf-8').write(json.dumps({'event':'deployment_acceptance_marker'}, separators=(',', ':')) + '\n'))"
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not append the deployment acceptance audit marker.'
+}
+
 $before = docker compose --file $composeFile exec -T api python -c `
     "from pathlib import Path; p=Path('/var/lib/quant-agent/audit/events.jsonl'); print(len(p.read_text(encoding='utf-8').splitlines()) if p.exists() else 0)"
 if ($LASTEXITCODE -ne 0) {
     throw 'Could not inspect the append-only audit volume.'
+}
+if ([int]$before -lt 1) {
+    throw 'Acceptance requires at least one persisted audit record before rollback.'
 }
 
 # Simulate a failed candidate process, then prove the prior digest can restore service.

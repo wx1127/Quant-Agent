@@ -19,7 +19,7 @@ RUN python -m pip install --no-cache-dir --requirement /app/requirements.lock
 
 RUN groupadd --system --gid 10001 quant-agent \
     && useradd --system --uid 10001 --gid quant-agent --home-dir /nonexistent quant-agent \
-    && mkdir -p /var/lib/quant-agent/audit \
+    && mkdir -p /var/lib/quant-agent/data /var/lib/quant-agent/audit \
     && chown -R quant-agent:quant-agent /var/lib/quant-agent
 
 COPY --chown=quant-agent:quant-agent apps /app/apps
