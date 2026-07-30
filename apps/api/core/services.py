@@ -299,16 +299,22 @@ class OrderApprovalService:
         submitter: Callable[[OrderDraftRecord], dict[str, Any]],
         audit_sink: AuditSink | None = None,
         approval_ttl: timedelta = timedelta(minutes=5),
+        price_provider: Callable[[OrderDraftRecord], dict[str, float]] | None = None,
+        maximum_price_deviation_bps: float = 100.0,
     ) -> None:
         if len(signing_secret) < 32:
             raise ValueError("approval signing secret must be at least 32 bytes")
         if not timedelta(seconds=1) <= approval_ttl <= timedelta(minutes=15):
             raise ValueError("approval TTL must be between one second and fifteen minutes")
+        if maximum_price_deviation_bps <= 0:
+            raise ValueError("maximum price deviation must be positive")
         self._secret = signing_secret
         self._kill_switch = kill_switch
         self._submitter = submitter
         self._audit_sink = audit_sink
         self._approval_ttl = approval_ttl
+        self._price_provider = price_provider or _draft_reference_prices
+        self._maximum_price_deviation_bps = maximum_price_deviation_bps
         self._drafts: dict[str, OrderDraftRecord] = {}
         self._grants: dict[str, ApprovalGrant] = {}
         self._submissions: dict[str, tuple[str, dict[str, Any]]] = {}
@@ -407,6 +413,7 @@ class OrderApprovalService:
                     ErrorCode.KILL_SWITCH_ACTIVE,
                     "Kill Switch is active for this account",
                 )
+            self._validate_latest_prices(draft)
             assert grant is not None
             self._grants[grant_key] = ApprovalGrant(**{**asdict(grant), "consumed": True})
             result = self._submitter(draft)
@@ -426,6 +433,31 @@ class OrderApprovalService:
                 },
             )
             return result
+
+    def _validate_latest_prices(self, draft: OrderDraftRecord) -> None:
+        latest = self._price_provider(draft)
+        for order in draft.orders:
+            instrument_id = str(order.get("instrument_id", ""))
+            reference = order.get("reference_price")
+            if reference is None:
+                continue
+            current = latest.get(instrument_id)
+            if current is None or current <= 0:
+                raise QuantAgentError(
+                    ErrorCode.DATA_UNAVAILABLE,
+                    "latest price is unavailable before order submission",
+                    details={"instrument_id": instrument_id},
+                )
+            deviation_bps = abs(float(current) / float(reference) - 1) * 10_000
+            if deviation_bps > self._maximum_price_deviation_bps:
+                raise QuantAgentError(
+                    ErrorCode.APPROVAL_REQUIRED,
+                    "price moved beyond the approved order boundary",
+                    details={
+                        "instrument_id": instrument_id,
+                        "deviation_bps": round(deviation_bps, 2),
+                    },
+                )
 
     def _validate_token(
         self,
@@ -513,3 +545,11 @@ class ApiServices:
 
 def _b64(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
+
+
+def _draft_reference_prices(draft: OrderDraftRecord) -> dict[str, float]:
+    return {
+        str(order["instrument_id"]): float(order["reference_price"])
+        for order in draft.orders
+        if order.get("instrument_id") and order.get("reference_price") is not None
+    }

@@ -1,0 +1,12 @@
+{
+  "runtime_mode": "PAPER",
+  "broker": "fake",
+  "as_of": "2026-07-30T15:10:00+08:00",
+  "decision_id": "dec_20260730_e2e",
+  "data_version": "market-fixed-p8-v1",
+  "instrument_id": "000001.SZ",
+  "quantity": 500,
+  "reference_price": 10.0,
+  "market_open": 10.0,
+  "batch_hash": "e2e-batch-fixed-001"
+}

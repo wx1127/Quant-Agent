@@ -12,7 +12,8 @@ Quant Agent 是一个面向中国内地股票与场内 ETF 的日频量化研究
 
 ## 当前进度
 
-P0 本地工程基础以及 P1～P7 已实现；P0 的远程 CI 仍待在 GitHub 页面确认。
+P0 本地工程基础、P1～P7 以及 P8 本地验证基础已实现；P0 的远程 CI 仍待在
+GitHub 页面确认，P8 部署和长期运行任务尚未提前启动。
 详细状态见：
 
 - [项目进度文档](./docs/04-project-progress.md)
@@ -180,6 +181,28 @@ P7 已提供：
 
 默认应用不会内置任何访问令牌或真实账户。部署时必须从外部认证与密钥服务注入用户；
 Web 只提供模拟提交，真实券商执行仍未实现。
+
+## P8 系统验证基础
+
+P8 当前已完成无需生产资源的四项验证：
+
+- 固定数据、PAPER 模式、Fake Broker、自动重置与失败诊断的端到端环境；
+- 十二个系统黄金场景及机器可读回放报告；
+- 审批角色矩阵、提示注入、敏感输出、Kill Switch 和明文凭证扫描；
+- 特征排名延迟、内存保留、收盘后预算和一年数据容量验收。
+
+常用命令：
+
+```powershell
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m tests.e2e.runner
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m tests.replay.runner
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m pytest tests/security
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m tests.performance.runner
+```
+
+详细边界与结果见 [P8 系统验证报告](./docs/05-p8-validation-report.md)。P8-T05
+仍等待 P0 远程 CI 前置确认；影子运行、三个月模拟盘、券商合规与实盘辅助均保持
+`未开始`。
 
 ## 目录
 
