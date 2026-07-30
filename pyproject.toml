@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "A controlled quantitative research and trading-assistance agent."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -13,7 +13,12 @@ authors = [
   { name = "Quant Agent Contributors" }
 ]
 dependencies = [
+  "alembic>=1.14,<2",
+  "duckdb>=1.2,<2",
+  "httpx>=0.28,<1",
   "pydantic>=2.10,<3",
+  "pyarrow>=18,<24",
+  "sqlalchemy>=2.0,<3",
 ]
 
 [project.optional-dependencies]
@@ -80,3 +85,7 @@ strict = true
 packages = ["quant_agent"]
 mypy_path = "packages"
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true

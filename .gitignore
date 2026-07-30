@@ -25,9 +25,9 @@ env/
 Thumbs.db
 
 # Runtime data
-data/
-logs/
-artifacts/
+/data/
+/logs/
+/artifacts/
 *.log
 *.jsonl
 *.parquet
@@ -46,4 +46,3 @@ configs/environments/production.override.toml
 node_modules/
 .next/
 coverage/
-

@@ -12,7 +12,7 @@ Quant Agent 是一个面向中国内地股票与场内 ETF 的日频量化研究
 
 ## 当前进度
 
-当前正在实施 P0 工程与治理基础。详细状态见：
+P0 工程基础和 P1 数据底座已经实现。详细状态见：
 
 - [项目进度文档](./docs/04-project-progress.md)
 
@@ -58,6 +58,29 @@ conda activate 'D:\DevelopTool\MinConda\envs\Quant Agent'
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m mypy packages
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m pytest
 ```
+
+## P1 数据底座
+
+P1 已提供：
+
+- SQLAlchemy 数据模型与 Alembic 初始迁移；
+- 交易日历、稳定证券 ID、历史代码和状态区间；
+- Provider 协议、Fake Provider 和 Tushare 日线 HTTP 适配器；
+- 原始响应归档与幂等日线入库；
+- 独立复权因子、公司行动和复权研究视图；
+- Point-in-time 财务修订查询；
+- 历史行业归属；
+- 数据质量规则和失败关闭；
+- Parquet 不可变快照与 DuckDB 查询。
+
+创建或升级本地数据库：
+
+```powershell
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m alembic upgrade head
+```
+
+测试默认使用内存数据库、伪数据和 HTTP Mock，不会访问真实行情接口。真实调用
+Tushare 时，Token 必须从密钥引用解析，不得写入仓库或日志。
 
 ## 目录
 
