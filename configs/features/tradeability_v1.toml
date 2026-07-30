@@ -1,0 +1,4 @@
+version = "tradeability_v1"
+minimum_listing_days = 120
+minimum_average_turnover = 20000000
+maximum_participation_rate = 0.05

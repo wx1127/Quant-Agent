@@ -1,0 +1,4 @@
+version = "events_v1"
+allowed_sources = ["exchange", "company", "government", "licensed_news"]
+maximum_content_length = 20000
+ambiguous_events_generate_evidence = false

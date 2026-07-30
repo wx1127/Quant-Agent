@@ -1,0 +1,5 @@
+version = "stock_trend_v1"
+trend_windows = [20, 60]
+minimum_tradable_observations = 61
+use_adjusted_close = true
+industry_missing_policy = "WARN_AND_PENALIZE"

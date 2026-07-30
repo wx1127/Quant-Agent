@@ -1,0 +1,13 @@
+version = "candidate_v1"
+tier_a_score = 75.0
+tier_b_score = 60.0
+probability_output_enabled = false
+
+[weights]
+market_regime = 0.20
+theme = 0.20
+leader = 0.20
+price_trend = 0.15
+volume_price_structure = 0.10
+fundamental_or_event = 0.10
+valuation = 0.05

@@ -1,0 +1,10 @@
+version = "leader_v1"
+
+[weights]
+within_theme_strength = 0.25
+trend_quality = 0.15
+liquidity = 0.15
+theme_leadership = 0.15
+downside_resilience = 0.10
+logic_relevance = 0.10
+fundamental_quality = 0.10
