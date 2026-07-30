@@ -3,11 +3,13 @@
 import json
 from dataclasses import asdict
 
+from tests.replay.golden.scenarios import EXECUTORS
+
 from quant_agent.validation.golden import SystemGoldenReplay
 
 
 def main() -> int:
-    report = SystemGoldenReplay().run()
+    report = SystemGoldenReplay(EXECUTORS).run()
     print(
         json.dumps(
             {

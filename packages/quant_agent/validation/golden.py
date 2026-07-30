@@ -1,24 +1,33 @@
-"""Executable system-level replay for the twelve fixed safety scenarios."""
+"""System-level golden replay contracts and executor."""
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import ClassVar
 
-from quant_agent.agent.evaluation import (
-    GOLDEN_SCENARIOS,
-    ExpectedOutcome,
-    ScenarioTrace,
-    TrajectoryEvaluator,
-)
-from quant_agent.agent.runtime import AgentState
+from quant_agent.agent.evaluation import GOLDEN_SCENARIOS, ExpectedOutcome
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioEvidence:
+    name: str
+    passed: bool
+    observed: str
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioExecution:
+    scenario_id: str
+    actual: ExpectedOutcome
+    evidence: tuple[ScenarioEvidence, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class GoldenReplayResult:
     scenario_id: str
     expected: ExpectedOutcome
-    actual: ExpectedOutcome
-    checks: tuple[str, ...]
+    actual: ExpectedOutcome | None
+    evidence: tuple[ScenarioEvidence, ...]
     passed: bool
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,71 +39,52 @@ class GoldenReplayReport:
         return len(self.results) == 12 and all(item.passed for item in self.results)
 
 
-class SystemGoldenReplay:
-    """Map every frozen scenario to an explicit executable safety assertion."""
+ScenarioExecutor = Callable[[], ScenarioExecution]
 
-    _CHECKS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "G01": ("fixed market data valid", "research report contains evidence"),
-        "G02": ("breadth counter-evidence retained",),
-        "G03": ("unconfirmed theme cannot enter trade candidate set",),
-        "G04": ("limit-up stock rejected as unbuyable",),
-        "G05": ("external instructions isolated as untrusted content",),
-        "G06": ("future financial availability rejected",),
-        "G07": ("invalid market data prevents order draft",),
-        "G08": ("post-approval price deviation requires new approval",),
-        "G09": ("accepted broker order recovered by idempotency key",),
-        "G10": ("partial fill creates reconciliation incident",),
-        "G11": ("paper/live mode mismatch rejected",),
-        "G12": ("risk bypass rejected before order tool call",),
-    }
+
+class SystemGoldenReplay:
+    """Execute all twelve real component scenarios and compare observed outcomes."""
+
+    def __init__(self, executors: Mapping[str, ScenarioExecutor]) -> None:
+        required = {scenario.scenario_id for scenario in GOLDEN_SCENARIOS}
+        supplied = set(executors)
+        if supplied != required:
+            missing = sorted(required - supplied)
+            extra = sorted(supplied - required)
+            raise ValueError(f"golden executors mismatch: missing={missing}, extra={extra}")
+        self._executors = dict(executors)
 
     def run(self) -> GoldenReplayReport:
-        traces = [
-            self._trace(
-                scenario.scenario_id,
-                scenario.expected,
-                scenario.required_states,
-                scenario.required_tools,
-            )
-            for scenario in GOLDEN_SCENARIOS
-        ]
-        evaluated = TrajectoryEvaluator().evaluate(traces)
-        evaluation_by_id = {item.scenario_id: item for item in evaluated.results}
         results = []
-        for scenario, trace in zip(GOLDEN_SCENARIOS, traces, strict=True):
-            evaluation = evaluation_by_id[scenario.scenario_id]
-            results.append(
-                GoldenReplayResult(
-                    scenario.scenario_id,
-                    scenario.expected,
-                    self._outcome(trace.states[-1]),
-                    self._CHECKS[scenario.scenario_id],
-                    evaluation.passed and bool(self._CHECKS[scenario.scenario_id]),
+        for scenario in GOLDEN_SCENARIOS:
+            try:
+                execution = self._executors[scenario.scenario_id]()
+                evidence_passed = bool(execution.evidence) and all(
+                    item.passed for item in execution.evidence
                 )
-            )
+                passed = (
+                    execution.scenario_id == scenario.scenario_id
+                    and execution.actual is scenario.expected
+                    and evidence_passed
+                )
+                results.append(
+                    GoldenReplayResult(
+                        scenario.scenario_id,
+                        scenario.expected,
+                        execution.actual,
+                        execution.evidence,
+                        passed,
+                    )
+                )
+            except Exception as exc:
+                results.append(
+                    GoldenReplayResult(
+                        scenario.scenario_id,
+                        scenario.expected,
+                        None,
+                        (),
+                        False,
+                        f"{type(exc).__name__}: {exc}",
+                    )
+                )
         return GoldenReplayReport(tuple(results))
-
-    @staticmethod
-    def _trace(
-        scenario_id: str,
-        expected: ExpectedOutcome,
-        required_states: tuple[AgentState, ...],
-        required_tools: tuple[str, ...],
-    ) -> ScenarioTrace:
-        if expected is ExpectedOutcome.REPORT:
-            states = (*required_states, AgentState.REPORTED)
-        elif expected is ExpectedOutcome.INCIDENT:
-            states = (*required_states, AgentState.INCIDENT)
-        elif AgentState.DATA_INVALID in required_states:
-            states = required_states
-        else:
-            states = (*required_states, AgentState.REJECTED)
-        return ScenarioTrace(scenario_id, states, required_tools)
-
-    @staticmethod
-    def _outcome(terminal: AgentState) -> ExpectedOutcome:
-        if terminal is AgentState.REPORTED:
-            return ExpectedOutcome.REPORT
-        if terminal is AgentState.INCIDENT:
-            return ExpectedOutcome.INCIDENT
-        return ExpectedOutcome.REJECT

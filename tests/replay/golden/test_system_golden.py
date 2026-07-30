@@ -3,22 +3,55 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from apps.api.core.services import OrderApprovalService, OrderDraftRecord
+from tests.replay.golden.scenarios import EXECUTORS
 
 from quant_agent.agent.content_security import ExternalContentSanitizer
 from quant_agent.agent.evaluation import ExpectedOutcome
 from quant_agent.config.models import AppEnvironment, RuntimeMode, RuntimeSettings
 from quant_agent.core.errors import ErrorCode, QuantAgentError
 from quant_agent.risk.kill_switch import KillSwitch
-from quant_agent.validation.golden import SystemGoldenReplay
+from quant_agent.validation.golden import (
+    ScenarioEvidence,
+    ScenarioExecution,
+    SystemGoldenReplay,
+)
 
 NOW = datetime(2026, 7, 30, 15, 10, tzinfo=ZoneInfo("Asia/Shanghai"))
 
 
 def test_all_twelve_system_golden_scenarios_have_passing_assertions() -> None:
-    report = SystemGoldenReplay().run()
+    report = SystemGoldenReplay(EXECUTORS).run()
     assert report.passed
     assert {item.scenario_id for item in report.results} == {f"G{i:02d}" for i in range(1, 13)}
     assert sum(item.actual is ExpectedOutcome.REJECT for item in report.results) == 6
+    assert all(item.evidence for item in report.results)
+    assert all(item.error is None for item in report.results)
+
+
+def test_golden_runner_rejects_missing_executor_false_evidence_and_exceptions() -> None:
+    with pytest.raises(ValueError, match="missing"):
+        SystemGoldenReplay({key: value for key, value in EXECUTORS.items() if key != "G12"})
+
+    failing = dict(EXECUTORS)
+    failing["G12"] = lambda: ScenarioExecution(
+        "G12",
+        ExpectedOutcome.REJECT,
+        (ScenarioEvidence("risk bypass rejected", False, "draft was created"),),
+    )
+    failed = SystemGoldenReplay(failing).run().results[-1]
+    assert not failed.passed
+    assert failed.error is None
+
+    broken = dict(EXECUTORS)
+
+    def raise_unexpected() -> ScenarioExecution:
+        raise RuntimeError("broken fixture")
+
+    broken["G12"] = raise_unexpected
+    errored = SystemGoldenReplay(broken).run().results[-1]
+    assert not errored.passed
+    assert errored.actual is None
+    assert errored.error == "RuntimeError: broken fixture"
 
 
 def test_g05_external_prompt_injection_is_isolated() -> None:
