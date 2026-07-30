@@ -1,0 +1,8 @@
+version = "portfolio_risk_v1"
+maximum_stock_weight = 0.05
+maximum_etf_weight = 0.40
+maximum_industry_weight = 0.25
+maximum_total_equity_weight = 0.80
+maximum_turnover = 0.20
+drawdown_warning = 0.10
+drawdown_stop = 0.15

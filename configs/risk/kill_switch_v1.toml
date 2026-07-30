@@ -1,0 +1,4 @@
+version = "kill_switch_v1"
+recovery_role = "RISK_ADMIN"
+agent_recovery_allowed = false
+critical_reconciliation_auto_trigger = true
