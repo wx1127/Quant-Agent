@@ -1,0 +1,6 @@
+version = "backtest_engine_v1"
+effective_from = "2020-01-01"
+stock_lot_size = 100
+etf_lot_size = 100
+maximum_volume_participation = 0.10
+signal_execution_lag = 1

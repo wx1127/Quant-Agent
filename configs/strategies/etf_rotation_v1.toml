@@ -1,0 +1,8 @@
+version = "etf_rotation_v1"
+selected_count = 3
+minimum_listing_days = 120
+minimum_turnover = 50000000
+maximum_tracking_error = 0.03
+maximum_equity_weight = 0.80
+rebalance_weekday = 0
+drift_threshold = 0.10

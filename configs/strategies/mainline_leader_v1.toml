@@ -1,0 +1,6 @@
+version = "mainline_leader_v1"
+maximum_positions = 5
+maximum_single_weight = 0.20
+maximum_total_weight = 0.80
+maximum_turnover = 0.50
+eligible_leader_types = ["TREND", "CAPACITY"]

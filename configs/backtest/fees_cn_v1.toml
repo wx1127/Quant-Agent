@@ -1,0 +1,6 @@
+version = "cn_fees_2023_v1"
+effective_from = "2023-08-28"
+commission_rate = 0.0003
+minimum_commission = 5.0
+stock_sell_tax_rate = 0.0005
+slippage_bps = 5.0
