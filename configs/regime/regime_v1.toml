@@ -1,0 +1,14 @@
+version = "regime_v1"
+uptrend_threshold = 70.0
+range_strong_threshold = 55.0
+range_weak_threshold = 40.0
+confirmation_days = 2
+urgent_downtrend_threshold = 25.0
+
+[weights]
+trend = 0.25
+breadth = 0.20
+turnover = 0.15
+new_high_low = 0.15
+diffusion = 0.15
+risk = 0.10

@@ -1,0 +1,5 @@
+version = "market_features_v1"
+trend_windows = [20, 60, 120]
+breadth_windows = [20, 60]
+minimum_complete_indices = 2
+missing_value_policy = "FAIL"

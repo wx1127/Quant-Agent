@@ -1,0 +1,18 @@
+version = "mainline_v1"
+history_window = 5
+required_top_history_days = 3
+top_rank_for_confirmation = 3
+top_history_rank = 5
+minimum_breadth_score = 50.0
+maximum_single_stock_contribution = 0.60
+crowded_threshold = 75.0
+fading_score = 60.0
+
+[weights]
+relative_strength = 0.25
+breadth = 0.20
+turnover = 0.15
+leader_persistence = 0.15
+new_high = 0.10
+event_support = 0.10
+downside_resilience = 0.05
