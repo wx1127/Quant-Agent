@@ -1,0 +1,66 @@
+version = "harness_v1"
+max_tool_calls = 32
+task_timeout_seconds = 300
+require_idempotency_for_writes = true
+require_evidence_for_numbers = true
+allow_chat_mode_switch = false
+allow_live_auto = false
+
+[permissions.RESEARCH]
+tools = [
+  "get_market_snapshot",
+  "validate_market_data",
+  "detect_market_regime",
+  "rank_market_themes",
+  "rank_theme_leaders",
+  "rank_stock_candidates",
+  "explain_candidate",
+]
+
+[permissions.BACKTEST]
+tools = [
+  "get_market_snapshot",
+  "validate_market_data",
+  "detect_market_regime",
+  "rank_market_themes",
+  "rank_theme_leaders",
+  "rank_stock_candidates",
+  "explain_candidate",
+  "run_backtest",
+]
+
+[permissions.PAPER]
+tools = [
+  "get_market_snapshot",
+  "validate_market_data",
+  "detect_market_regime",
+  "rank_market_themes",
+  "rank_theme_leaders",
+  "rank_stock_candidates",
+  "explain_candidate",
+  "get_portfolio_snapshot",
+  "build_target_portfolio",
+  "check_portfolio_risk",
+  "create_order_draft",
+  "submit_paper_orders",
+  "reconcile_account",
+]
+
+[permissions.LIVE_ASSISTED]
+tools = [
+  "get_market_snapshot",
+  "validate_market_data",
+  "detect_market_regime",
+  "rank_market_themes",
+  "rank_theme_leaders",
+  "rank_stock_candidates",
+  "explain_candidate",
+  "get_portfolio_snapshot",
+  "build_target_portfolio",
+  "check_portfolio_risk",
+  "create_order_draft",
+  "reconcile_account",
+]
+
+[human_only]
+tools = ["approve_order_batch", "recover_kill_switch"]

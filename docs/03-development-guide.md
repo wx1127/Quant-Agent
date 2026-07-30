@@ -643,6 +643,21 @@ class AgentAnswer(BaseModel):
     data_versions: list[str]
 ```
 
+### 14.4 P6 已实现模块
+
+0.7.0 的实现位于 `packages/quant_agent/agent/`：
+
+- `snapshots.py` 固定一次决策使用的全部权威版本；
+- `tools/registry.py` 实现未注册即拒绝、模式/状态权限、参数校验和审计；
+- `tools/adapters.py` 将研究、组合、风控和模拟执行封装为标准工具响应；
+- `runtime.py` 强制状态转换、调用次数、超时和取消；
+- `responses.py` 要求数字引用具体工具响应字段；
+- `security.py` 阻止外部文本或用户指令提升权限；
+- `evaluation.py` 与 `audit_replay.py` 提供黄金轨迹评测和决策回放。
+
+工具适配器只负责边界和编排，不复制底层市场、策略、组合或风控计算。新增工具必须
+同时声明类别、读写属性、允许模式、允许状态、参数模型和服务版本。
+
 ## 15. API 设计
 
 建议 API：
@@ -991,4 +1006,3 @@ v1 稳定后再评估：
 - 受限自动实盘。
 
 任何扩展都不得绕过 Harness 的权限、快照、风控、审批和审计要求。
-

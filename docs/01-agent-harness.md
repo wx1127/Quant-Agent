@@ -590,3 +590,17 @@ Harness v1 完成需满足：
 - 实现黄金场景自动回放；
 - 明确禁用 `LIVE_AUTO`。
 
+### 20.1 P6 实现映射（0.7.0）
+
+P6 已实现 Harness 的 Agent 侧边界：
+
+- `agent/snapshots.py`：决策快照、内容哈希和追加式存储；
+- `agent/tools/`：拒绝式注册、模式/状态权限、参数校验和受控适配；
+- `agent/runtime.py`：显式状态转换、调用预算、超时、取消和轨迹；
+- `agent/responses.py`：证据引用、数字追溯、反对证据和失效条件；
+- `agent/security.py`：不可信内容、模式提升、标的和敏感输出防护；
+- `agent/evaluation.py`：十二个黄金场景的确定性轨迹评测；
+- `agent/audit_replay.py`：按 `decision_id` 的哈希验证和差异回放。
+
+一次性人工审批令牌和真实执行网关不属于 P6 的 Agent 权限。它们必须由后续独立
+人工入口实现；在此之前 `LIVE_ASSISTED` 只能生成经风控的草案，不能提交真实订单。
