@@ -323,6 +323,12 @@ class OrderApprovalService:
     def put_draft(self, draft: OrderDraftRecord) -> None:
         self._drafts[draft.draft_id] = draft
 
+    @property
+    def kill_switch(self) -> KillSwitch:
+        """Expose the shared deployment gate for identity validation."""
+
+        return self._kill_switch
+
     def get_draft(self, draft_id: str) -> OrderDraftRecord:
         try:
             return self._drafts[draft_id]

@@ -1,0 +1,43 @@
+services:
+  migrate:
+    image: ${QUANT_AGENT_IMAGE:?set QUANT_AGENT_IMAGE to repository@sha256 digest}
+    command: ["python", "/app/scripts/deploy/migrate.py", "--upgrade"]
+    environment:
+      QUANT_AGENT_DATABASE_URL: sqlite:////var/lib/quant-agent/data/test.db
+    volumes:
+      - test-data:/var/lib/quant-agent/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api:
+    image: ${QUANT_AGENT_IMAGE:?set QUANT_AGENT_IMAGE to repository@sha256 digest}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      QUANT_AGENT_APP_ENV: test
+      QUANT_AGENT_RUNTIME_MODE: RESEARCH
+      QUANT_AGENT_DATABASE_URL: sqlite:////var/lib/quant-agent/data/test.db
+      QUANT_AGENT_AUDIT_LOG_PATH: /var/lib/quant-agent/audit/events.jsonl
+    ports:
+      - "127.0.0.1:${QUANT_AGENT_TEST_PORT:-8000}:8000"
+    volumes:
+      - test-data:/var/lib/quant-agent/data
+      - test-audit:/var/lib/quant-agent/audit
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+volumes:
+  test-data:
+  test-audit:

@@ -1,5 +1,7 @@
 """Quant Agent FastAPI application factory."""
 
+import hashlib
+import os
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,8 +25,10 @@ from apps.api.routes import agent, backtest_portfolio, orders, research
 from quant_agent import __version__
 from quant_agent.agent.responses import AgentAnswer
 from quant_agent.agent.security import AgentSecurityGuard
-from quant_agent.config.models import RuntimeMode
-from quant_agent.risk.kill_switch import KillSwitch
+from quant_agent.config.models import AppEnvironment, RuntimeMode, RuntimeSettings
+from quant_agent.core.time import shanghai_now
+from quant_agent.observability.audit import AuditEvent, AuditSink, JsonLinesAuditSink
+from quant_agent.risk.kill_switch import KillSwitch, KillSwitchScope
 
 
 def create_app(
@@ -32,9 +36,19 @@ def create_app(
     services: ApiServices | None = None,
     auth: AuthService | None = None,
     agent_security: AgentSecurityGuard | None = None,
+    runtime_settings: RuntimeSettings | None = None,
+    kill_switch: KillSwitch | None = None,
+    audit_sink: AuditSink | None = None,
 ) -> FastAPI:
+    runtime = runtime_settings or _runtime_from_environment()
+    deployment_kill_switch = kill_switch or KillSwitch()
+    deployment_audit = audit_sink or _audit_from_environment(runtime)
     owned_services = services is None
-    api_services = services or _default_services()
+    api_services = services or _default_services(deployment_kill_switch, deployment_audit)
+    if runtime.app_env is AppEnvironment.PRODUCTION:
+        if api_services.orders.kill_switch is not deployment_kill_switch:
+            raise ValueError("production services must share the deployment Kill Switch")
+        _secure_production_boot(deployment_kill_switch, deployment_audit)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -50,8 +64,10 @@ def create_app(
     )
     app.state.services = api_services
     app.state.auth = auth or AuthService()
+    app.state.runtime = runtime
+    app.state.kill_switch = deployment_kill_switch
     app.state.agent_security = agent_security or AgentSecurityGuard(
-        configured_mode=RuntimeMode.RESEARCH,
+        configured_mode=runtime.mode,
         allowed_instruments=set(),
     )
     install_error_handling(app)
@@ -59,6 +75,20 @@ def create_app(
     @app.get("/health", include_in_schema=False)
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    @app.get("/health/live", include_in_schema=False)
+    def health_live() -> dict[str, str]:
+        return {"status": "alive", "version": __version__}
+
+    @app.get("/health/ready", include_in_schema=False)
+    def health_ready() -> dict[str, str | bool]:
+        return {
+            "status": "ready",
+            "version": __version__,
+            "environment": runtime.app_env,
+            "mode": runtime.mode,
+            "kill_switch_active": not deployment_kill_switch.order_allowed("__readiness_probe__"),
+        }
 
     app.include_router(research.router, prefix="/v1")
     app.include_router(backtest_portfolio.router, prefix="/v1")
@@ -96,7 +126,10 @@ def create_app(
     return app
 
 
-def _default_services() -> ApiServices:
+def _default_services(
+    kill_switch: KillSwitch | None = None,
+    audit_sink: AuditSink | None = None,
+) -> ApiServices:
     backtests = BacktestTaskStore(
         {("etf_rotation", "etf_rotation_v1"), ("mainline_leader", "mainline_leader_v1")},
         lambda strategy, parameters, data: {
@@ -109,12 +142,13 @@ def _default_services() -> ApiServices:
     portfolios = PortfolioService()
     orders_service = OrderApprovalService(
         secrets.token_bytes(32),
-        KillSwitch(),
+        kill_switch or KillSwitch(),
         lambda draft: {
             "status": "PAPER_SUBMITTED",
             "draft_id": draft.draft_id,
             "batch_hash": draft.batch_hash,
         },
+        audit_sink,
     )
 
     def no_evidence(_message: str, _user_id: str) -> AgentAnswer:
@@ -140,6 +174,50 @@ def _default_services() -> ApiServices:
             "violations": ["No risk service is configured."],
         },
     )
+
+
+def _runtime_from_environment() -> RuntimeSettings:
+    app_env = AppEnvironment(os.getenv("QUANT_AGENT_APP_ENV", AppEnvironment.LOCAL))
+    mode = RuntimeMode(os.getenv("QUANT_AGENT_RUNTIME_MODE", RuntimeMode.RESEARCH))
+    return RuntimeSettings(app_env=app_env, mode=mode, allow_live_auto=False)
+
+
+def _audit_from_environment(runtime: RuntimeSettings) -> AuditSink | None:
+    path = os.getenv("QUANT_AGENT_AUDIT_LOG_PATH")
+    if path:
+        return JsonLinesAuditSink(path)
+    if runtime.app_env is AppEnvironment.PRODUCTION:
+        raise ValueError("production requires QUANT_AGENT_AUDIT_LOG_PATH")
+    return None
+
+
+def _secure_production_boot(kill_switch: KillSwitch, audit_sink: AuditSink | None) -> None:
+    occurred_at = shanghai_now()
+    snapshot_hash = hashlib.sha256(
+        f"production-boot|{__version__}|{occurred_at.isoformat()}".encode()
+    ).hexdigest()
+    if kill_switch.order_allowed("__production_boot__"):
+        kill_switch.trigger(
+            scope=KillSwitchScope.GLOBAL,
+            account_id=None,
+            reason="production starts with Kill Switch active",
+            actor_id="deployment",
+            actor_role="SYSTEM",
+            occurred_at=occurred_at,
+            incident_snapshot_hash=snapshot_hash,
+        )
+    if audit_sink is not None:
+        audit_sink.append(
+            AuditEvent(
+                event_type="deployment",
+                actor_id="deployment",
+                action="PRODUCTION_BOOT_KILL_SWITCH",
+                result="active",
+                request_id=f"boot-{snapshot_hash[:16]}",
+                occurred_at=occurred_at,
+                metadata={"version": __version__, "snapshot_hash": snapshot_hash},
+            )
+        )
 
 
 app = create_app()
