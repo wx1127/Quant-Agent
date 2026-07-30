@@ -1,0 +1,18 @@
+[runtime]
+app_env = "paper"
+mode = "PAPER"
+timezone = "Asia/Shanghai"
+allow_live_auto = false
+
+[logging]
+level = "INFO"
+json = true
+
+[storage]
+database_url = "postgresql://quant_agent:change-me@localhost:5432/quant_agent_paper"
+research_storage_path = "./data/paper"
+
+[secrets]
+market_data_token_ref = "env://MARKET_DATA_TOKEN"
+llm_api_key_ref = "env://LLM_API_KEY"
+

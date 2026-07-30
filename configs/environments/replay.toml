@@ -1,0 +1,18 @@
+[runtime]
+app_env = "replay"
+mode = "BACKTEST"
+timezone = "Asia/Shanghai"
+allow_live_auto = false
+
+[logging]
+level = "INFO"
+json = true
+
+[storage]
+database_url = "sqlite:///./artifacts/replay.db"
+research_storage_path = "./artifacts/replay"
+
+[secrets]
+market_data_token_ref = "env://REPLAY_MARKET_DATA_TOKEN"
+llm_api_key_ref = "env://REPLAY_LLM_API_KEY"
+

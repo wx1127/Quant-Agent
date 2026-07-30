@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime data
+data/
+logs/
+artifacts/
+*.log
+*.jsonl
+*.parquet
+*.duckdb
+*.sqlite
+*.db
+
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+configs/environments/local.override.toml
+configs/environments/production.override.toml
+
+# Frontend
+node_modules/
+.next/
+coverage/
+

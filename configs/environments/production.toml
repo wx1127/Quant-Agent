@@ -1,0 +1,18 @@
+[runtime]
+app_env = "production"
+mode = "LIVE_ASSISTED"
+timezone = "Asia/Shanghai"
+allow_live_auto = false
+
+[logging]
+level = "INFO"
+json = true
+
+[storage]
+database_url = "env://QUANT_AGENT_DATABASE_URL"
+research_storage_path = "./data/production"
+
+[secrets]
+market_data_token_ref = "vault://quant-agent/market-data-token"
+llm_api_key_ref = "vault://quant-agent/llm-api-key"
+

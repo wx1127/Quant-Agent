@@ -1,0 +1,18 @@
+[runtime]
+app_env = "test"
+mode = "RESEARCH"
+timezone = "Asia/Shanghai"
+allow_live_auto = false
+
+[logging]
+level = "WARNING"
+json = true
+
+[storage]
+database_url = "sqlite:///:memory:"
+research_storage_path = "./artifacts/test-data"
+
+[secrets]
+market_data_token_ref = "env://TEST_MARKET_DATA_TOKEN"
+llm_api_key_ref = "env://TEST_LLM_API_KEY"
+
