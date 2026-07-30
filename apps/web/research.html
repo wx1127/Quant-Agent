@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quant Agent · 市场研究</title>
+  <link rel="stylesheet" href="/web/static/app.css">
+</head>
+<body data-page="research">
+  <div class="shell">
+    <aside>
+      <p class="brand">QUANT AGENT</p>
+      <nav aria-label="主导航">
+        <a class="active" href="/web/research">市场研究</a>
+        <a href="/web/trading">组合与审批</a>
+        <a href="/web/chat">研究对话</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Research workspace</p>
+          <h1>市场阶段与主线</h1>
+          <p id="as-of" class="muted">数据截止：等待认证后加载</p>
+        </div>
+        <div class="token-box">
+          <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌"
+                 aria-label="访问令牌">
+          <button id="save-token">连接</button>
+        </div>
+      </header>
+      <p id="status" class="status-line" aria-live="polite"></p>
+      <section class="grid">
+        <article class="card span-4">
+          <span class="pill">阶段分类，不是上涨概率</span>
+          <p id="regime-state" class="score">—</p>
+          <p class="muted">市场阶段</p>
+        </article>
+        <article class="card span-8">
+          <div class="section-head"><h2>阶段证据</h2><span id="regime-score" class="pill">—</span></div>
+          <div id="regime-evidence"></div>
+        </article>
+        <article class="card span-6">
+          <div class="section-head"><h2>主线雷达</h2><small>分数用于排序，不代表收益概率</small></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>主线</th><th>状态</th><th>分数</th><th>持续</th></tr></thead>
+            <tbody id="themes-body"></tbody>
+          </table></div>
+        </article>
+        <article class="card span-6">
+          <div class="section-head"><h2>龙头与候选</h2><small>不可交易标的仅供观察</small></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>证券</th><th>主线</th><th>层级</th><th>分数</th><th>状态</th></tr></thead>
+            <tbody id="candidates-body"></tbody>
+          </table></div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/static/app.js"></script>
+</body>
+</html>

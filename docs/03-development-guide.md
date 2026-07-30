@@ -690,6 +690,22 @@ POST /v1/runtime/kill-switch
 
 所有 API 使用版本号、请求 ID 和统一错误结构。
 
+### 15.1 P7 已实现模块
+
+0.8.0 的应用入口为 `apps.api.app:app`：
+
+- `apps/api/core/`：Bearer 认证、角色/账户授权、请求 ID、错误脱敏和服务边界；
+- `apps/api/routes/research.py`：市场、主线、龙头、候选和个股证据；
+- `apps/api/routes/backtest_portfolio.py`：异步回测、账户快照、独立风控和组合提案；
+- `apps/api/routes/orders.py`：人工审批、一次性令牌、幂等模拟提交和核对；
+- `apps/api/routes/agent.py`：不能切换模式或代替审批的研究对话；
+- `packages/quant_agent/reports/daily.py`：结构化日报及 Markdown/HTML 渲染；
+- `apps/web/`：研究、证据、回测、组合、风险、审批和对话页面。
+
+组合提案的风控结果必须由服务端 `risk_handler` 产生，客户端不能提交 `passed=true`
+绕过风控。审批令牌最长五分钟有效，绑定审批人、账户、决策 ID、草案和订单哈希，
+修改草案、令牌过期、重复消费或 Kill Switch 激活都会拒绝提交。
+
 ## 16. 任务调度
 
 ### 16.1 收盘后任务

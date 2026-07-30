@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quant Agent · 组合与审批</title>
+  <link rel="stylesheet" href="/web/static/app.css">
+</head>
+<body data-page="trading">
+  <div class="shell">
+    <aside>
+      <p class="brand">QUANT AGENT</p>
+      <nav aria-label="主导航">
+        <a href="/web/research">市场研究</a>
+        <a class="active" href="/web/trading">组合与审批</a>
+        <a href="/web/chat">研究对话</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">Controlled paper workflow</p><h1>订单人工审批</h1>
+          <p class="muted">仅模拟提交。审批不能由 Agent 代替。</p></div>
+        <div class="token-box">
+          <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌">
+          <button id="save-token">连接</button>
+        </div>
+      </header>
+      <p id="status" class="status-line" aria-live="polite"></p>
+      <section class="grid">
+        <article class="card span-6">
+          <div class="section-head"><h2>回测中心</h2><span class="pill">异步任务</span></div>
+          <p><input id="strategy-id" value="etf_rotation" aria-label="策略 ID"></p>
+          <p><input id="parameter-version" value="etf_rotation_v1" aria-label="参数版本"></p>
+          <p><input id="backtest-data-version" placeholder="冻结数据版本" aria-label="数据版本">
+            <button id="run-backtest">创建回测</button></p>
+          <p id="backtest-result" class="muted">只允许已发布策略和参数。</p>
+        </article>
+        <article class="card span-6">
+          <div class="section-head"><h2>组合中心</h2><span class="pill">只读快照</span></div>
+          <p><input id="account-id" value="paper-1" aria-label="账户 ID">
+            <button id="load-portfolio">加载组合</button></p>
+          <div id="portfolio-detail" class="muted">展示账户时点、版本和权益。</div>
+        </article>
+        <article class="card span-12">
+          <div class="section-head"><h2>加载订单草案</h2>
+            <div class="token-box"><input id="draft-id" placeholder="draft_id">
+              <button id="load-draft">查看</button></div></div>
+          <div id="draft-detail"><p class="muted">订单、费用、有效期和哈希将在此展示。</p></div>
+        </article>
+        <article class="card risk-panel span-12" aria-label="不可折叠风险警告">
+          <h2>风险中心 · 风险警告（始终显示）</h2>
+          <ul id="risk-list"><li>加载草案后必须逐项核对风险、价格和账户。</li></ul>
+        </article>
+        <article class="card span-12">
+          <div class="section-head"><div><h2>审批与模拟提交</h2>
+            <p class="muted">令牌绑定订单哈希、决策、账户和有效期，只能使用一次。</p></div>
+            <div class="token-box"><button id="approve" disabled>人工批准</button>
+              <button id="submit" disabled>提交模拟盘</button></div></div>
+          <input id="approval-token" type="password" readonly aria-label="审批令牌">
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/static/app.js"></script>
+</body>
+</html>

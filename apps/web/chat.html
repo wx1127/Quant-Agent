@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quant Agent · 研究对话</title>
+  <link rel="stylesheet" href="/web/static/app.css">
+</head>
+<body data-page="chat">
+  <div class="shell">
+    <aside>
+      <p class="brand">QUANT AGENT</p>
+      <nav aria-label="主导航">
+        <a href="/web/research">市场研究</a>
+        <a href="/web/trading">组合与审批</a>
+        <a class="active" href="/web/chat">研究对话</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">Evidence-first assistant</p><h1>受控研究对话</h1>
+          <p class="muted">对话可以研究和解释，不能审批、跳过风控或切换运行模式。</p></div>
+        <div class="token-box">
+          <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌">
+          <button id="save-token">连接</button>
+        </div>
+      </header>
+      <p id="status" class="status-line" aria-live="polite"></p>
+      <section class="grid">
+        <article class="card span-12">
+          <div id="chat-log" class="chat-log" aria-live="polite">
+            <div class="bubble agent">我会展示决策 ID、数据截止时间和可追溯证据。证据不足时会明确说明。</div>
+          </div>
+          <div class="composer"><textarea id="message" rows="3"
+            placeholder="例如：分析当前市场阶段、主线和候选证据"></textarea>
+            <button id="send">发送研究任务</button></div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/static/app.js"></script>
+</body>
+</html>

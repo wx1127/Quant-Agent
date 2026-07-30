@@ -25,7 +25,7 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "request_id": _request_id.get(),
+            "request_id": getattr(record, "request_id", None) or _request_id.get(),
             "decision_id": _decision_id.get(),
         }
         if record.exc_info:

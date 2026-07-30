@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quant Agent · 个股证据</title>
+  <link rel="stylesheet" href="/web/static/app.css">
+</head>
+<body data-page="evidence">
+  <div class="shell">
+    <aside>
+      <p class="brand">QUANT AGENT</p>
+      <nav aria-label="主导航">
+        <a class="active" href="/web/research">市场研究</a>
+        <a href="/web/trading">组合与审批</a>
+        <a href="/web/chat">研究对话</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">Instrument evidence</p><h1 id="evidence-title">个股证据</h1>
+          <p id="evidence-as-of" class="muted">数据截止：等待加载</p></div>
+        <div class="token-box">
+          <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌">
+          <button id="save-token">连接</button>
+        </div>
+      </header>
+      <p id="status" class="status-line" aria-live="polite"></p>
+      <section class="grid">
+        <article class="card span-12">
+          <div class="section-head"><h2>证券查询</h2>
+            <div class="token-box"><input id="instrument-id" placeholder="000001.SZ">
+              <button id="load-evidence">加载证据</button></div></div>
+        </article>
+        <article class="card span-12" id="evidence-detail">
+          <p class="muted">支持证据、反对证据、风险和失效条件将在此同时展示。</p>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/static/app.js"></script>
+</body>
+</html>

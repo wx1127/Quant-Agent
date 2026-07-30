@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-agent"
-version = "0.7.0"
+version = "0.8.0"
 description = "A controlled quantitative research and trading-assistance agent."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -15,10 +15,13 @@ authors = [
 dependencies = [
   "alembic>=1.14,<2",
   "duckdb>=1.2,<2",
+  "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "pydantic>=2.10,<3",
   "pyarrow>=18,<24",
   "sqlalchemy>=2.0,<3",
+  "starlette>=0.46,<1",
+  "uvicorn>=0.34,<1",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +44,7 @@ addopts = [
   "--strict-config",
   "--strict-markers",
   "--cov=quant_agent",
+  "--cov=apps",
   "--cov-report=term-missing",
   "--cov-report=xml",
   "--cov-fail-under=90",
@@ -49,7 +53,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["quant_agent"]
+source = ["quant_agent", "apps"]
 
 [tool.coverage.report]
 show_missing = true
@@ -77,13 +81,15 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]
+"tests/**/*.py" = ["S101", "RUF001"]
+"apps/api/**/*.py" = ["B008"]
+"packages/quant_agent/reports/daily.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["quant_agent"]
-mypy_path = "packages"
+packages = ["quant_agent", "apps"]
+mypy_path = ["packages", "."]
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
