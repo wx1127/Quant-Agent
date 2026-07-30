@@ -1,0 +1,52 @@
+{
+  "title": "Quant Agent Safety Operations",
+  "uid": "quant-agent-safety",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Kill Switch",
+      "targets": [{"expr": "quant_agent_kill_switch_active"}],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Risk Service Available",
+      "targets": [{"expr": "quant_agent_risk_service_available"}],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Data Completeness",
+      "targets": [{"expr": "quant_agent_data_completeness_ratio"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Service Success Rate",
+      "targets": [
+        {
+          "expr": "rate(quant_agent_service_success_total[5m]) / rate(quant_agent_service_requests_total[5m])"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Risk and Reconciliation Events",
+      "targets": [
+        {"expr": "quant_agent_risk_rejections_total"},
+        {"expr": "quant_agent_reconciliation_differences_total"},
+        {"expr": "quant_agent_duplicate_order_risks_total"}
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12}
+    }
+  ]
+}

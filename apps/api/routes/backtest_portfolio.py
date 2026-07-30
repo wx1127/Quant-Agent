@@ -14,6 +14,13 @@ from apps.api.routes.schemas import (
 router = APIRouter(tags=["backtest", "portfolio"])
 
 
+def _record_risk_result(request: Request, result: dict[str, object]) -> None:
+    request.app.state.monitoring.record_risk_check(
+        available=bool(result.get("available", True)),
+        passed=bool(result.get("passed", False)),
+    )
+
+
 @router.post("/backtests", status_code=status.HTTP_202_ACCEPTED)
 def create_backtest(
     payload: BacktestCreateRequest,
@@ -63,6 +70,7 @@ def create_portfolio_proposal(
         payload.decision_id,
         payload.target,
     )
+    _record_risk_result(request, risk_result)
     proposal = request.app.state.services.portfolios.create_proposal(
         account_id=payload.account_id,
         decision_id=payload.decision_id,
@@ -86,6 +94,7 @@ def check_risk(
         payload.decision_id,
         payload.target,
     )
+    _record_risk_result(request, result)
     return {"request_id": request.state.request_id, "data": result}
 
 

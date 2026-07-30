@@ -17,6 +17,7 @@ from quant_agent.agent.responses import AgentAnswer
 from quant_agent.core.errors import ErrorCode, QuantAgentError
 from quant_agent.core.time import ensure_aware, shanghai_now
 from quant_agent.observability.audit import AuditEvent, AuditSink
+from quant_agent.observability.monitoring import MonitoringRegistry
 from quant_agent.risk.kill_switch import KillSwitch
 
 
@@ -301,6 +302,7 @@ class OrderApprovalService:
         approval_ttl: timedelta = timedelta(minutes=5),
         price_provider: Callable[[OrderDraftRecord], dict[str, float]] | None = None,
         maximum_price_deviation_bps: float = 100.0,
+        monitoring: MonitoringRegistry | None = None,
     ) -> None:
         if len(signing_secret) < 32:
             raise ValueError("approval signing secret must be at least 32 bytes")
@@ -315,6 +317,7 @@ class OrderApprovalService:
         self._approval_ttl = approval_ttl
         self._price_provider = price_provider or _draft_reference_prices
         self._maximum_price_deviation_bps = maximum_price_deviation_bps
+        self._monitoring = monitoring
         self._drafts: dict[str, OrderDraftRecord] = {}
         self._grants: dict[str, ApprovalGrant] = {}
         self._submissions: dict[str, tuple[str, dict[str, Any]]] = {}
@@ -404,6 +407,8 @@ class OrderApprovalService:
             if existing is not None:
                 existing_draft_id, existing_result = existing
                 if existing_draft_id != draft_id:
+                    if self._monitoring is not None:
+                        self._monitoring.record_order_submission(duplicate_risk=True)
                     raise QuantAgentError(
                         ErrorCode.CONFLICT,
                         "idempotency key is already bound to another order draft",
@@ -424,6 +429,8 @@ class OrderApprovalService:
             self._grants[grant_key] = ApprovalGrant(**{**asdict(grant), "consumed": True})
             result = self._submitter(draft)
             self._submissions[idempotency_key] = (draft_id, result)
+            if self._monitoring is not None:
+                self._monitoring.record_order_submission()
             self._audit(
                 actor_id=submitted_by,
                 action="SUBMIT_APPROVED_PAPER_ORDERS",

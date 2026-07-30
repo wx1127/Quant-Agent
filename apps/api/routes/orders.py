@@ -80,6 +80,11 @@ def reconcile_account(
 ) -> dict[str, object]:
     require_account(principal, account_id)
     result = request.app.state.services.reconcile_handler(account_id)
+    differences = result.get("differences", [])
+    severities = tuple(
+        str(item.get("severity", "INFO")) for item in differences if isinstance(item, dict)
+    )
+    request.app.state.monitoring.record_reconciliation(severities)
     return {
         "request_id": request.state.request_id,
         "data": result,

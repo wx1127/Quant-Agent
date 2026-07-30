@@ -1,0 +1,55 @@
+groups:
+  - name: quant-agent-safety
+    rules:
+      - alert: QuantAgentDuplicateOrderRisk
+        expr: increase(quant_agent_duplicate_order_risks_total[5m]) > 0
+        labels:
+          severity: P0
+        annotations:
+          summary: Duplicate order risk was rejected
+          runbook: docs/07-monitoring-alerting-runbook.md#p0-重复下单风险
+      - alert: QuantAgentCriticalReconciliationDifference
+        expr: increase(quant_agent_reconciliation_differences_total{severity="CRITICAL"}[5m]) > 0
+        labels:
+          severity: P0
+        annotations:
+          summary: Critical order, fill, cash or position difference
+          runbook: docs/07-monitoring-alerting-runbook.md#p0-严重账实差异
+      - alert: QuantAgentRiskServiceUnavailable
+        expr: quant_agent_risk_service_available == 0
+        for: 30s
+        labels:
+          severity: P1
+        annotations:
+          summary: Risk service is unavailable and mutations must fail closed
+          runbook: docs/07-monitoring-alerting-runbook.md#p1-风控不可用
+      - alert: QuantAgentKillSwitchActive
+        expr: quant_agent_kill_switch_active == 1
+        labels:
+          severity: P1
+        annotations:
+          summary: Global or account Kill Switch is active
+          runbook: docs/07-monitoring-alerting-runbook.md#p1-kill-switch-开启
+      - alert: QuantAgentDataIncomplete
+        expr: quant_agent_data_completeness_ratio < 0.98
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: Expected market or account data is incomplete
+          runbook: docs/07-monitoring-alerting-runbook.md#p2-数据完成度不足
+      - alert: QuantAgentServiceErrorRate
+        expr: 1 - (rate(quant_agent_service_success_total[5m]) / rate(quant_agent_service_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: Service error rate is above one percent
+          runbook: docs/07-monitoring-alerting-runbook.md#p2-服务健康度
+      - alert: QuantAgentElevatedRiskRejections
+        expr: increase(quant_agent_risk_rejections_total[30m]) >= 5
+        labels:
+          severity: P3
+        annotations:
+          summary: Risk rejection volume requires routine review
+          runbook: docs/07-monitoring-alerting-runbook.md#p3-风控拒绝升高

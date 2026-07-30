@@ -211,6 +211,11 @@ P8 当前已完成无需生产资源的四项验证：
 [部署与回滚运行手册](./docs/06-deployment-runbook.md)。影子运行、
 三个月模拟盘、券商合规与实盘辅助均保持 `未开始`。
 
+P8-T06 监控与告警已完成：提供数据完成度、服务成功率/延迟、风控拒绝、订单、
+账实核对和 Kill Switch 指标，重复下单与严重账实差异固定为 P0，风控不可用固定为
+P1。Prometheus 规则、Grafana 看板及处置流程见
+[监控与告警运行手册](./docs/07-monitoring-alerting-runbook.md)。
+
 ## 目录
 
 ```text

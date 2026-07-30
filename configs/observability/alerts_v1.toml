@@ -1,0 +1,14 @@
+version = "alerts_v1"
+
+[thresholds]
+minimum_data_completeness = 0.98
+minimum_service_success_rate = 0.99
+maximum_service_latency_seconds = 2.0
+minimum_service_requests = 10
+elevated_risk_rejections = 5
+
+[routes]
+P0 = ["incident-primary", "risk-lead"]
+P1 = ["risk-oncall", "platform-oncall"]
+P2 = ["data-platform", "operations"]
+P3 = ["operations-review"]

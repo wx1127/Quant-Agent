@@ -3,12 +3,13 @@
 import hashlib
 import os
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import perf_counter
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from apps.api.core.auth import AuthService
@@ -28,6 +29,7 @@ from quant_agent.agent.security import AgentSecurityGuard
 from quant_agent.config.models import AppEnvironment, RuntimeMode, RuntimeSettings
 from quant_agent.core.time import shanghai_now
 from quant_agent.observability.audit import AuditEvent, AuditSink, JsonLinesAuditSink
+from quant_agent.observability.monitoring import MonitoringRegistry
 from quant_agent.risk.kill_switch import KillSwitch, KillSwitchScope
 
 
@@ -39,12 +41,18 @@ def create_app(
     runtime_settings: RuntimeSettings | None = None,
     kill_switch: KillSwitch | None = None,
     audit_sink: AuditSink | None = None,
+    monitoring: MonitoringRegistry | None = None,
 ) -> FastAPI:
     runtime = runtime_settings or _runtime_from_environment()
     deployment_kill_switch = kill_switch or KillSwitch()
     deployment_audit = audit_sink or _audit_from_environment(runtime)
+    monitoring_registry = monitoring or MonitoringRegistry()
     owned_services = services is None
-    api_services = services or _default_services(deployment_kill_switch, deployment_audit)
+    api_services = services or _default_services(
+        deployment_kill_switch,
+        deployment_audit,
+        monitoring_registry,
+    )
     if runtime.app_env is AppEnvironment.PRODUCTION:
         if api_services.orders.kill_switch is not deployment_kill_switch:
             raise ValueError("production services must share the deployment Kill Switch")
@@ -66,11 +74,33 @@ def create_app(
     app.state.auth = auth or AuthService()
     app.state.runtime = runtime
     app.state.kill_switch = deployment_kill_switch
+    app.state.monitoring = monitoring_registry
     app.state.agent_security = agent_security or AgentSecurityGuard(
         configured_mode=runtime.mode,
         allowed_instruments=set(),
     )
     install_error_handling(app)
+
+    @app.middleware("http")
+    async def monitor_request(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        started = perf_counter()
+        success = False
+        try:
+            response = await call_next(request)
+            success = response.status_code < 500
+            return response
+        finally:
+            route = request.scope.get("route")
+            operation = getattr(route, "path", "unmatched")
+            monitoring_registry.record_service(
+                "api",
+                operation,
+                success=success,
+                latency_seconds=perf_counter() - started,
+            )
 
     @app.get("/health", include_in_schema=False)
     def health() -> dict[str, str]:
@@ -82,13 +112,25 @@ def create_app(
 
     @app.get("/health/ready", include_in_schema=False)
     def health_ready() -> dict[str, str | bool]:
+        kill_switch_active = not deployment_kill_switch.order_allowed("__readiness_probe__")
+        monitoring_registry.set_kill_switch(kill_switch_active)
         return {
             "status": "ready",
             "version": __version__,
             "environment": runtime.app_env,
             "mode": runtime.mode,
-            "kill_switch_active": not deployment_kill_switch.order_allowed("__readiness_probe__"),
+            "kill_switch_active": kill_switch_active,
         }
+
+    @app.get("/internal/metrics", include_in_schema=False)
+    def internal_metrics() -> PlainTextResponse:
+        monitoring_registry.set_kill_switch(
+            not deployment_kill_switch.order_allowed("__metrics_probe__")
+        )
+        return PlainTextResponse(
+            monitoring_registry.render_prometheus(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     app.include_router(research.router, prefix="/v1")
     app.include_router(backtest_portfolio.router, prefix="/v1")
@@ -129,6 +171,7 @@ def create_app(
 def _default_services(
     kill_switch: KillSwitch | None = None,
     audit_sink: AuditSink | None = None,
+    monitoring: MonitoringRegistry | None = None,
 ) -> ApiServices:
     backtests = BacktestTaskStore(
         {("etf_rotation", "etf_rotation_v1"), ("mainline_leader", "mainline_leader_v1")},
@@ -149,6 +192,7 @@ def _default_services(
             "batch_hash": draft.batch_hash,
         },
         audit_sink,
+        monitoring=monitoring,
     )
 
     def no_evidence(_message: str, _user_id: str) -> AgentAnswer:
@@ -164,11 +208,13 @@ def _default_services(
         reconcile_handler=lambda account_id: {
             "account_id": account_id,
             "status": "UNAVAILABLE",
+            "available": False,
             "differences": [],
             "message": "No reconciliation service is configured.",
         },
         risk_handler=lambda account_id, decision_id, target: {
             "passed": False,
+            "available": False,
             "account_id": account_id,
             "decision_id": decision_id,
             "violations": ["No risk service is configured."],
