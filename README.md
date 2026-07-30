@@ -57,9 +57,14 @@ conda activate 'D:\DevelopTool\MinConda\envs\Quant Agent'
 ```powershell
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m ruff format --check .
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m ruff check .
-& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m mypy packages
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m mypy packages apps
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' scripts/verify_ci_gates.py
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m pytest
 ```
+
+CI 会在所有分支推送、面向 `main` 的 Pull Request 和手工触发时运行。手工触发可
+选择 `format`、`type` 或 `test` 负向故障，验证对应质量门确实阻断；普通运行还会
+在临时目录自动验证三类故障，并上传 JUnit 与覆盖率报告。
 
 ## P1 数据底座
 

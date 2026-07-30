@@ -2,17 +2,35 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      fault_injection:
+        description: "Optional negative control; the selected quality gate must fail"
+        required: false
+        default: none
+        type: choice
+        options:
+          - none
+          - format
+          - type
+          - test
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      QUANT_AGENT_RUNTIME_MODE: RESEARCH
+      QUANT_AGENT_TEST_DATA_ONLY: "true"
 
     steps:
       - name: Check out repository
@@ -25,7 +43,28 @@ jobs:
           cache: pip
 
       - name: Install project
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.lock
+          python -m pip install --no-deps -e .
+
+      - name: Inject formatting negative control
+        if: ${{ inputs.fault_injection == 'format' }}
+        run: |
+          printf '\ndef deliberately_unformatted( value:int )->int:\n return value\n' \
+            >> packages/quant_agent/__init__.py
+
+      - name: Inject typing negative control
+        if: ${{ inputs.fault_injection == 'type' }}
+        run: |
+          printf '\ndef deliberate_type_failure(value: int) -> str:\n    return value\n' \
+            >> packages/quant_agent/__init__.py
+
+      - name: Inject testing negative control
+        if: ${{ inputs.fault_injection == 'test' }}
+        run: |
+          printf 'def test_deliberate_ci_failure() -> None:\n    assert False\n' \
+            > tests/test_deliberate_ci_failure.py
 
       - name: Check formatting
         run: python -m ruff format --check .
@@ -34,8 +73,22 @@ jobs:
         run: python -m ruff check .
 
       - name: Type check
-        run: python -m mypy packages
+        run: python -m mypy packages apps
+
+      - name: Verify negative-control gates
+        if: ${{ inputs.fault_injection == '' || inputs.fault_injection == 'none' }}
+        run: python scripts/verify_ci_gates.py
 
       - name: Test
-        run: python -m pytest
+        run: python -m pytest --junitxml=pytest-report.xml
 
+      - name: Upload test reports
+        if: ${{ always() && hashFiles('pytest-report.xml', 'coverage.xml') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_id }}
+          path: |
+            pytest-report.xml
+            coverage.xml
+          if-no-files-found: error
+          retention-days: 14
