@@ -94,7 +94,7 @@ class AlertPolicyEngine:
         alerts: list[AlertEvent] = []
         if snapshot.duplicate_order_risks_total:
             alerts.append(
-                _event(
+                create_alert_event(
                     "duplicate-order-risk",
                     AlertSeverity.P0,
                     "检测到重复下单风险",
@@ -108,7 +108,7 @@ class AlertPolicyEngine:
         critical = snapshot.reconciliation_count("CRITICAL")
         if critical:
             alerts.append(
-                _event(
+                create_alert_event(
                     "critical-reconciliation-difference",
                     AlertSeverity.P0,
                     "账实核对存在严重差异",
@@ -121,7 +121,7 @@ class AlertPolicyEngine:
             )
         if not snapshot.risk_service_available:
             alerts.append(
-                _event(
+                create_alert_event(
                     "risk-service-unavailable",
                     AlertSeverity.P1,
                     "风控服务不可用",
@@ -134,7 +134,7 @@ class AlertPolicyEngine:
             )
         if snapshot.kill_switch_active:
             alerts.append(
-                _event(
+                create_alert_event(
                     "kill-switch-active",
                     AlertSeverity.P1,
                     "Kill Switch 已开启",
@@ -148,7 +148,7 @@ class AlertPolicyEngine:
         for pipeline, ratio in snapshot.data_completeness:
             if ratio < self._config.minimum_data_completeness:
                 alerts.append(
-                    _event(
+                    create_alert_event(
                         f"data-incomplete:{pipeline}",
                         AlertSeverity.P2,
                         "数据完成度低于阈值",
@@ -168,7 +168,7 @@ class AlertPolicyEngine:
             }
             if service.success_rate < self._config.minimum_service_success_rate:
                 alerts.append(
-                    _event(
+                    create_alert_event(
                         f"service-success:{service.component}:{service.operation}",
                         AlertSeverity.P2,
                         "服务成功率低于阈值",
@@ -184,7 +184,7 @@ class AlertPolicyEngine:
                 )
             if service.maximum_latency_seconds > self._config.maximum_service_latency_seconds:
                 alerts.append(
-                    _event(
+                    create_alert_event(
                         f"service-latency:{service.component}:{service.operation}",
                         AlertSeverity.P2,
                         "服务延迟超过阈值",
@@ -201,7 +201,7 @@ class AlertPolicyEngine:
         warning = snapshot.reconciliation_count("WARNING")
         if warning:
             alerts.append(
-                _event(
+                create_alert_event(
                     "warning-reconciliation-difference",
                     AlertSeverity.P2,
                     "账实核对存在待处理差异",
@@ -214,7 +214,7 @@ class AlertPolicyEngine:
             )
         if snapshot.risk_rejections_total >= self._config.elevated_risk_rejections:
             alerts.append(
-                _event(
+                create_alert_event(
                     "elevated-risk-rejections",
                     AlertSeverity.P3,
                     "风控拒绝数量升高",
@@ -288,7 +288,7 @@ class AlertDispatcher:
         return tuple(deliveries)
 
 
-def _event(
+def create_alert_event(
     policy_id: str,
     severity: AlertSeverity,
     title: str,

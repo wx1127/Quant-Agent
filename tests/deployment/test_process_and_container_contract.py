@@ -84,16 +84,27 @@ def test_test_environment_process_starts_and_passes_health_check(tmp_path) -> No
 def test_container_and_rollback_files_enforce_release_safety() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     production = (ROOT / "deploy" / "compose.production.yml").read_text(encoding="utf-8")
+    shadow = (ROOT / "deploy" / "compose.shadow.yml").read_text(encoding="utf-8")
+    shadow_collect = (ROOT / "deploy" / "compose.shadow.collect.yml").read_text(encoding="utf-8")
     rollback = (ROOT / "scripts" / "deploy" / "rollback.ps1").read_text(encoding="utf-8")
     acceptance = (ROOT / "scripts" / "deploy" / "acceptance.ps1").read_text(encoding="utf-8")
     assert "FROM python:3.12.13-slim-bookworm@sha256:" in dockerfile
     assert "USER 10001:10001" in dockerfile
     assert "mkdir -p /var/lib/quant-agent/data /var/lib/quant-agent/audit" in dockerfile
+    assert "/var/lib/quant-agent/shadow /var/lib/quant-agent/reports" in dockerfile
+    assert "scripts/shadow /app/scripts/shadow" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "read_only: true" in production
     assert "no-new-privileges:true" in production
     assert "cap_drop:" in production
     assert "quant-agent-production-audit" in production
+    assert "QUANT_AGENT_RUNTIME_MODE: RESEARCH" in shadow
+    assert "read_only: true" in shadow
+    assert "no-new-privileges:true" in shadow
+    assert "quant-agent-shadow-data" in shadow
+    assert "MARKET_DATA_TOKEN_FILE: /run/secrets/market_data_token" in shadow_collect
+    assert "market_data_token:" in shadow_collect
+    assert "read_only: true" in shadow_collect
     assert "command.downgrade" not in rollback.casefold()
     assert "audit volume retained" in rollback
     assert "Rollback image did not become healthy." in rollback

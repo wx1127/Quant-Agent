@@ -1,0 +1,35 @@
+services:
+  shadow-collect:
+    image: ${QUANT_AGENT_IMAGE:?set QUANT_AGENT_IMAGE to repository@sha256 digest}
+    command:
+      - python
+      - /app/scripts/shadow/collect_tushare_day.py
+      - --trading-date
+      - ${SHADOW_TRADING_DATE:?set SHADOW_TRADING_DATE to YYYY-MM-DD}
+      - --market
+      - SSE
+      - --output-dir
+      - /var/lib/quant-agent/shadow/snapshots
+    environment:
+      QUANT_AGENT_APP_ENV: paper
+      QUANT_AGENT_RUNTIME_MODE: RESEARCH
+      MARKET_DATA_TOKEN_FILE: /run/secrets/market_data_token
+    secrets:
+      - market_data_token
+    volumes:
+      - shadow-data:/var/lib/quant-agent/shadow
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  shadow-data:
+    name: quant-agent-shadow-data
+
+secrets:
+  market_data_token:
+    file: ${MARKET_DATA_TOKEN_FILE:?set MARKET_DATA_TOKEN_FILE to a local token file}

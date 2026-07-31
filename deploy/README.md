@@ -2,6 +2,8 @@
 
 - `compose.test.yml`：使用命名数据卷和审计卷的隔离测试环境。
 - `compose.production.yml`：只接受不可变镜像摘要和外部数据库连接。
+- `compose.shadow.yml`：以只读、非 root 容器重算影子账本状态和验收门禁。
+- `compose.shadow.collect.yml`：按交易日采集真实行情，令牌通过只读 Docker Secret 注入。
 - `../scripts/deploy/build-image.ps1`：构建镜像，可选推送并返回仓库摘要。
 - `../scripts/deploy/deploy.ps1`：迁移预检、前向迁移、启动和健康检查。
 - `../scripts/deploy/rollback.ps1`：只回滚代码镜像，不降级数据库、不替换审计卷。

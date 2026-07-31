@@ -61,7 +61,7 @@ def make_context(
     )
     runtime = AgentRuntime(
         decision_id=item.decision_id,
-        deadline=NOW + timedelta(days=1),
+        deadline=NOW + timedelta(days=3650),
         max_tool_calls=20,
     )
     paths = {

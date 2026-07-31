@@ -1,0 +1,11 @@
+version = "shadow_20260803_v1"
+
+[session]
+session_id = "shadow-20260803-v1"
+started_on = "2026-08-03"
+required_trading_days = 20
+provider = "tushare-pro"
+universe_version = "cn-a-share-v1"
+strategy_versions = ["etf_rotation_v1", "mainline_leader_v1"]
+minimum_data_success_rate = 0.98
+minimum_report_success_rate = 0.98

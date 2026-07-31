@@ -5,6 +5,7 @@ from quant_agent.observability.alerting import (
     AlertEvent,
     AlertPolicyEngine,
     AlertSeverity,
+    create_alert_event,
 )
 from quant_agent.observability.audit import AuditEvent, JsonLinesAuditSink
 from quant_agent.observability.logging import configure_logging, log_context
@@ -21,6 +22,7 @@ __all__ = [
     "MonitoringRegistry",
     "MonitoringSnapshot",
     "configure_logging",
+    "create_alert_event",
     "log_context",
     "redact",
 ]

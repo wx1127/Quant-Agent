@@ -1,0 +1,33 @@
+services:
+  shadow-status:
+    image: ${QUANT_AGENT_IMAGE:?set QUANT_AGENT_IMAGE to repository@sha256 digest}
+    command:
+      - python
+      - /app/scripts/shadow/status.py
+      - --config
+      - /app/configs/shadow/shadow_20260803_v1.toml
+      - --calendar
+      - /app/configs/shadow/calendar_20260803_20d.json
+      - --ledger
+      - /var/lib/quant-agent/shadow/evidence.jsonl
+      - --report-dir
+      - /var/lib/quant-agent/reports
+    environment:
+      QUANT_AGENT_APP_ENV: paper
+      QUANT_AGENT_RUNTIME_MODE: RESEARCH
+    volumes:
+      - shadow-data:/var/lib/quant-agent/shadow
+      - shadow-reports:/var/lib/quant-agent/reports
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  shadow-data:
+    name: quant-agent-shadow-data
+  shadow-reports:
+    name: quant-agent-shadow-reports

@@ -20,6 +20,7 @@ RUN python -m pip install --no-cache-dir --requirement /app/requirements.lock
 RUN groupadd --system --gid 10001 quant-agent \
     && useradd --system --uid 10001 --gid quant-agent --home-dir /nonexistent quant-agent \
     && mkdir -p /var/lib/quant-agent/data /var/lib/quant-agent/audit \
+        /var/lib/quant-agent/shadow /var/lib/quant-agent/reports \
     && chown -R quant-agent:quant-agent /var/lib/quant-agent
 
 COPY --chown=quant-agent:quant-agent apps /app/apps
@@ -27,6 +28,7 @@ COPY --chown=quant-agent:quant-agent packages /app/packages
 COPY --chown=quant-agent:quant-agent configs /app/configs
 COPY --chown=quant-agent:quant-agent migrations /app/migrations
 COPY --chown=quant-agent:quant-agent scripts/deploy /app/scripts/deploy
+COPY --chown=quant-agent:quant-agent scripts/shadow /app/scripts/shadow
 COPY --chown=quant-agent:quant-agent alembic.ini pyproject.toml /app/
 
 USER 10001:10001
