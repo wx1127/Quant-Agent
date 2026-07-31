@@ -1,11 +1,18 @@
 let bearerToken = "";
+const sessionTokenKey = "quant-agent-api-token";
+
+function rememberToken(token) {
+  bearerToken = token;
+  if (token) sessionStorage.setItem(sessionTokenKey, token);
+  else sessionStorage.removeItem(sessionTokenKey);
+}
 
 function bindToken() {
   const input = document.querySelector("#api-token");
   const button = document.querySelector("#save-token");
   if (!input || !button) return;
   button.addEventListener("click", () => {
-    bearerToken = input.value.trim();
+    rememberToken(input.value.trim());
     input.value = "";
     setStatus(bearerToken ? "本次页面会话已加载访问令牌。" : "访问令牌为空。");
     loadPageData();
@@ -15,10 +22,16 @@ function bindToken() {
 function loadTokenFromFragment() {
   const values = new URLSearchParams(window.location.hash.slice(1));
   const token = values.get("token")?.trim();
-  if (!token) return false;
-  bearerToken = token;
-  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  setStatus("本地只读研究会话已自动连接。");
+  if (token) {
+    rememberToken(token);
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setStatus("本地只读研究会话已自动连接。");
+    return true;
+  }
+  const remembered = sessionStorage.getItem(sessionTokenKey);
+  if (!remembered) return false;
+  bearerToken = remembered;
+  setStatus("已恢复当前标签页的只读研究会话。");
   return true;
 }
 

@@ -164,5 +164,6 @@ def test_reconciliation_uses_service_and_web_pages_expose_safety_controls(
     assert "支持证据、反对证据、风险和失效条件" in evidence.text
     web_script = client.get("/web/static/app.js").text
     assert "localStorage" not in web_script
+    assert "sessionStorage" in web_script
     assert "button.dataset.idempotencyKey" in web_script
     assert TOKENS["approver"] not in trading.text
