@@ -8,6 +8,7 @@ from quant_agent.shadow.models import (
     ShadowAcceptanceStatus,
     ShadowDayEvidence,
     ShadowIncident,
+    ShadowRunMode,
     ShadowSessionConfig,
 )
 from quant_agent.shadow.session import ShadowRunEvaluator
@@ -20,6 +21,7 @@ __all__ = [
     "ShadowEvidenceLedger",
     "ShadowIncident",
     "ShadowRunEvaluator",
+    "ShadowRunMode",
     "ShadowSessionConfig",
     "load_shadow_config",
     "load_shadow_day",

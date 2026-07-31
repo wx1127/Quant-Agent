@@ -12,6 +12,7 @@ from quant_agent.shadow.models import (
     IncidentSeverity,
     ShadowDayEvidence,
     ShadowIncident,
+    ShadowRunMode,
     ShadowSessionConfig,
 )
 
@@ -28,6 +29,7 @@ def load_shadow_config(path: str | Path) -> ShadowSessionConfig:
         strategy_versions=tuple(payload["strategy_versions"]),
         minimum_data_success_rate=payload["minimum_data_success_rate"],
         minimum_report_success_rate=payload["minimum_report_success_rate"],
+        run_mode=ShadowRunMode(payload.get("run_mode", "REALTIME")),
     )
 
 
@@ -73,6 +75,7 @@ def shadow_day_to_mapping(evidence: ShadowDayEvidence) -> dict[str, Any]:
         "resolved_incident_ids": list(evidence.resolved_incident_ids),
         "manual_intervention_minutes": evidence.manual_intervention_minutes,
         "notes": evidence.notes,
+        "run_mode": evidence.run_mode,
     }
 
 
@@ -106,4 +109,5 @@ def shadow_day_from_mapping(payload: dict[str, Any]) -> ShadowDayEvidence:
         resolved_incident_ids=tuple(payload.get("resolved_incident_ids", [])),
         manual_intervention_minutes=payload.get("manual_intervention_minutes", 0),
         notes=payload.get("notes", ""),
+        run_mode=ShadowRunMode(payload.get("run_mode", "REALTIME")),
     )

@@ -23,6 +23,11 @@ class ShadowAcceptanceStatus(StrEnum):
     PASSED = "PASSED"
 
 
+class ShadowRunMode(StrEnum):
+    REALTIME = "REALTIME"
+    HISTORICAL_POINT_IN_TIME = "HISTORICAL_POINT_IN_TIME"
+
+
 @dataclass(frozen=True, slots=True)
 class ShadowSessionConfig:
     session_id: str
@@ -33,6 +38,7 @@ class ShadowSessionConfig:
     strategy_versions: tuple[str, ...]
     minimum_data_success_rate: float = 0.98
     minimum_report_success_rate: float = 0.98
+    run_mode: ShadowRunMode = ShadowRunMode.REALTIME
 
     def __post_init__(self) -> None:
         if not self.session_id.startswith("shadow-"):
@@ -88,6 +94,7 @@ class ShadowDayEvidence:
     resolved_incident_ids: tuple[str, ...] = ()
     manual_intervention_minutes: int = 0
     notes: str = ""
+    run_mode: ShadowRunMode = ShadowRunMode.REALTIME
 
     def __post_init__(self) -> None:
         ensure_aware(self.observed_at)

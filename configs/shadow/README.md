@@ -1,11 +1,11 @@
 # Shadow run configuration
 
-`shadow_20260803_v1.toml` defines the planned P8-T07 session. The checked-in
-calendar is planning evidence derived from the official SSE closure schedule,
-not sufficient evidence for a counted run. Before day one, use
-`scripts/shadow/bootstrap_calendar.py` with `MARKET_DATA_TOKEN` to freeze the
-provider calendar into runtime storage and retain its hash.
+`shadow_20260701_historical_v1.toml` and `calendar_20260701_20d.json` define the
+completed point-in-time historical P8-T07 session. The July calendar is checked
+against non-empty real daily-bar responses during replay. `shadow_20260803_v1.toml`
+and its calendar remain as the superseded real-time plan and must not be mixed
+with the historical evidence ledger.
 
-Secrets must only enter through environment variables. Runtime ledgers,
-snapshots, reports and alert JSONL files belong under ignored `data/`,
-`artifacts/` or `logs/` directories.
+Secrets must only enter through environment variables or a read-only secret file.
+Runtime ledgers, snapshots, reports and alert JSONL files belong under ignored
+`data/`, `artifacts/` or `logs/` directories.

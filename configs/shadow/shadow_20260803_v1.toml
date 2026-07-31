@@ -7,5 +7,6 @@ required_trading_days = 20
 provider = "tushare-pro"
 universe_version = "cn-a-share-v1"
 strategy_versions = ["etf_rotation_v1", "mainline_leader_v1"]
+run_mode = "REALTIME"
 minimum_data_success_rate = 0.98
 minimum_report_success_rate = 0.98

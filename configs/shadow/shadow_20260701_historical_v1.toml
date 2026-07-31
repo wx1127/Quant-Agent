@@ -1,0 +1,12 @@
+version = "shadow_20260701_historical_v1"
+
+[session]
+session_id = "shadow-20260701-historical-v1"
+started_on = "2026-07-01"
+required_trading_days = 20
+provider = "tushare-pro"
+universe_version = "cn-a-share-daily-presence-v1"
+strategy_versions = ["market-segment-mainline-v1", "price-volume-candidate-v1"]
+run_mode = "HISTORICAL_POINT_IN_TIME"
+minimum_data_success_rate = 0.98
+minimum_report_success_rate = 0.98

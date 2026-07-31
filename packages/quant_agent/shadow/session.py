@@ -27,6 +27,8 @@ class ShadowRunEvaluator:
         if len(calendar) < config.required_trading_days:
             raise ValueError("calendar must cover the full shadow acceptance window")
         evidence = tuple(record.evidence for record in records)
+        if any(item.run_mode is not config.run_mode for item in evidence):
+            raise ValueError("shadow evidence run mode does not match session")
         observed_dates = tuple(item.trading_date for item in evidence)
         if any(day not in calendar for day in observed_dates):
             raise ValueError("shadow evidence contains a non-trading date")
