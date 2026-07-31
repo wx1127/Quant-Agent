@@ -184,6 +184,21 @@ P7 已提供：
 & 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m uvicorn apps.api.app:app
 ```
 
+如需在 Web 工作台展示已经生成的历史影子结果，可在启动前仅为本地模式注入分析文件和
+一次性只读令牌：
+
+```powershell
+$env:QUANT_AGENT_APP_ENV = 'local'
+$env:QUANT_AGENT_RUNTIME_MODE = 'RESEARCH'
+$env:QUANT_AGENT_LOCAL_RESEARCH_PATH = '<历史影子目录>\days\2026-07-28.analysis.json'
+$env:QUANT_AGENT_LOCAL_API_TOKEN = '<随机生成的本地令牌>'
+& 'D:\DevelopTool\MinConda\envs\Quant Agent\python.exe' -m uvicorn apps.api.app:app
+```
+
+使用 `http://127.0.0.1:8000/web/research#token=<本地令牌>` 首次进入；页面读取令牌后会
+立即从地址栏移除片段并自动加载市场阶段、主线、龙头、候选和证据。该便捷入口只在
+`local` 环境生效，不会为生产环境创建默认身份。
+
 默认应用不会内置任何访问令牌或真实账户。部署时必须从外部认证与密钥服务注入用户；
 Web 只提供模拟提交，真实券商执行仍未实现。
 

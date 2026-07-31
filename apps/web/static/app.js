@@ -12,6 +12,16 @@ function bindToken() {
   });
 }
 
+function loadTokenFromFragment() {
+  const values = new URLSearchParams(window.location.hash.slice(1));
+  const token = values.get("token")?.trim();
+  if (!token) return false;
+  bearerToken = token;
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  setStatus("本地只读研究会话已自动连接。");
+  return true;
+}
+
 async function api(path, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -240,6 +250,7 @@ function loadPageData() {
 
 document.addEventListener("DOMContentLoaded", () => {
   bindToken();
+  const bootstrapped = loadTokenFromFragment();
   document.querySelector("#load-draft")?.addEventListener("click", loadDraft);
   document.querySelector("#load-portfolio")?.addEventListener("click", loadPortfolio);
   document.querySelector("#run-backtest")?.addEventListener("click", startBacktest);
@@ -247,4 +258,5 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelector("#approve")?.addEventListener("click", (event) => approveDraft(event.currentTarget));
   document.querySelector("#submit")?.addEventListener("click", (event) => submitDraft(event.currentTarget));
   document.querySelector("#send")?.addEventListener("click", sendMessage);
+  if (bootstrapped) loadPageData();
 });

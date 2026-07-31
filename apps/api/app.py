@@ -12,8 +12,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from apps.api.core.auth import AuthService
+from apps.api.core.auth import AuthService, Principal, Role
 from apps.api.core.errors import install_error_handling
+from apps.api.core.local_bootstrap import research_catalog_from_shadow
 from apps.api.core.services import (
     ApiServices,
     BacktestTaskStore,
@@ -49,6 +50,7 @@ def create_app(
     monitoring_registry = monitoring or MonitoringRegistry()
     owned_services = services is None
     api_services = services or _default_services(
+        runtime,
         deployment_kill_switch,
         deployment_audit,
         monitoring_registry,
@@ -71,7 +73,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.services = api_services
-    app.state.auth = auth or AuthService()
+    app.state.auth = auth or _auth_from_environment(runtime)
     app.state.runtime = runtime
     app.state.kill_switch = deployment_kill_switch
     app.state.monitoring = monitoring_registry
@@ -169,6 +171,7 @@ def create_app(
 
 
 def _default_services(
+    runtime: RuntimeSettings,
     kill_switch: KillSwitch | None = None,
     audit_sink: AuditSink | None = None,
     monitoring: MonitoringRegistry | None = None,
@@ -198,8 +201,14 @@ def _default_services(
     def no_evidence(_message: str, _user_id: str) -> AgentAnswer:
         return AgentAnswer.insufficient(decision_id=None, as_of=None)
 
+    research_path = os.getenv("QUANT_AGENT_LOCAL_RESEARCH_PATH")
+    research_catalog = (
+        research_catalog_from_shadow(research_path)
+        if runtime.app_env is AppEnvironment.LOCAL and research_path
+        else ResearchCatalog()
+    )
     return ApiServices(
-        research=ResearchCatalog(),
+        research=research_catalog,
         backtests=backtests,
         portfolios=portfolios,
         orders=orders_service,
@@ -226,6 +235,21 @@ def _runtime_from_environment() -> RuntimeSettings:
     app_env = AppEnvironment(os.getenv("QUANT_AGENT_APP_ENV", AppEnvironment.LOCAL))
     mode = RuntimeMode(os.getenv("QUANT_AGENT_RUNTIME_MODE", RuntimeMode.RESEARCH))
     return RuntimeSettings(app_env=app_env, mode=mode, allow_live_auto=False)
+
+
+def _auth_from_environment(runtime: RuntimeSettings) -> AuthService:
+    auth = AuthService()
+    token = os.getenv("QUANT_AGENT_LOCAL_API_TOKEN")
+    if runtime.app_env is AppEnvironment.LOCAL and token:
+        auth.register_token(
+            token,
+            Principal(
+                "local-research",
+                frozenset({Role.VIEWER, Role.RESEARCHER}),
+                frozenset({"paper-1"}),
+            ),
+        )
+    return auth
 
 
 def _audit_from_environment(runtime: RuntimeSettings) -> AuditSink | None:
