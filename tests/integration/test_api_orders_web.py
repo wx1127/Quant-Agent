@@ -149,14 +149,21 @@ def test_reconciliation_uses_service_and_web_pages_expose_safety_controls(
     trading = client.get("/web/trading")
     chat = client.get("/web/chat")
     evidence = client.get("/web/evidence")
+    theme = client.get("/web/theme")
     assert (
         research.status_code
         == trading.status_code
         == chat.status_code
         == evidence.status_code
+        == theme.status_code
         == 200
     )
     assert "阶段分类，不是上涨概率" in research.text
+    assert "/web/static/app.js?v=20260801" in research.text
+    assert research.headers["cache-control"] == "no-store"
+    assert "点击行业查看全部成分股评分" in research.text
+    assert "板块内个股评分" in theme.text
+    assert "返回市场研究" in theme.text
     assert "风险警告（始终显示）" in trading.text
     assert "审批不能由 Agent 代替" in trading.text
     assert "回测中心" in trading.text and "组合中心" in trading.text

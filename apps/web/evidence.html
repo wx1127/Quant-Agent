@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quant Agent · 个股证据</title>
-  <link rel="stylesheet" href="/web/static/app.css">
+  <link rel="stylesheet" href="/web/static/app.css?v=20260801">
 </head>
 <body data-page="evidence">
   <div class="shell">
@@ -18,7 +18,8 @@
     </aside>
     <main>
       <header class="topbar">
-        <div><p class="eyebrow">Instrument evidence</p><h1 id="evidence-title">个股证据</h1>
+        <div><a class="ghost-button back-button" href="/web/research">← 返回市场研究</a>
+          <p class="eyebrow">Instrument evidence</p><h1 id="evidence-title">个股证据</h1>
           <p id="evidence-as-of" class="muted">数据截止：等待加载</p></div>
         <div class="token-box">
           <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌">
@@ -28,7 +29,7 @@
       <p id="status" class="status-line" aria-live="polite"></p>
       <section class="grid">
         <article class="card span-12">
-          <div class="section-head"><h2>证券查询</h2>
+          <div class="section-head"><h2>股票查询</h2>
             <div class="token-box"><input id="instrument-id" placeholder="000001.SZ">
               <button id="load-evidence">加载证据</button></div></div>
         </article>
@@ -38,6 +39,6 @@
       </section>
     </main>
   </div>
-  <script src="/web/static/app.js"></script>
+  <script src="/web/static/app.js?v=20260801"></script>
 </body>
 </html>

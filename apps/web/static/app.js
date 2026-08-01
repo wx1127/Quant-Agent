@@ -72,24 +72,87 @@ function evidenceBlock(item) {
   </div>`;
 }
 
+function stateLabel(value) {
+  return ({
+    UPTREND: "上升趋势",
+    RANGE_STRONG: "强势震荡",
+    DIVERGENT: "结构分化",
+    DOWNTREND: "下降趋势",
+    CONFIRMED: "已确认",
+    WATCH: "观察中",
+  })[value] || value || "暂无";
+}
+
+function roleLabel(value) {
+  return value === "LEADER" ? "龙头个股" : "候选个股";
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return `${(number * 100).toFixed(2)}%`;
+}
+
+function formatTurnover(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 亿`;
+  if (number >= 10000) return `${(number / 10000).toFixed(0)} 万`;
+  return number.toFixed(0);
+}
+
 async function loadResearch() {
   const [regime, themes, candidates] = await Promise.all([
     api("/market/regime"),
-    api("/themes?limit=5"),
-    api("/candidates?limit=8"),
+    api("/themes?limit=8"),
+    api("/candidates?limit=20"),
   ]);
-  document.querySelector("#as-of").textContent = `数据截止：${regime.as_of}`;
-  document.querySelector("#regime-state").textContent = regime.regime || regime.state || "暂无";
+  const marketAsOf = regime.market_as_of || regime.as_of;
+  document.querySelector("#as-of").textContent = `行情截止：${marketAsOf} · 研究快照：${regime.as_of}`;
+  document.querySelector("#regime-state").textContent = stateLabel(regime.regime || regime.state);
   document.querySelector("#regime-score").textContent = regime.score ?? "—";
+  const meter = document.querySelector("#regime-meter-fill");
+  if (meter) meter.style.width = `${Math.max(0, Math.min(100, Number(regime.score) || 0))}%`;
   document.querySelector("#regime-evidence").innerHTML = evidenceBlock(regime);
-  document.querySelector("#themes-body").innerHTML = themes.items.map((item) =>
-    `<tr><td>${escapeHtml(item.name || item.id)}</td><td>${escapeHtml(item.state)}</td>
-    <td>${escapeHtml(item.score)}</td><td>${escapeHtml(item.persistence_days)}</td></tr>`
+  document.querySelector("#themes-grid").innerHTML = themes.items.map((item) =>
+    `<a class="theme-tile" href="/web/theme?theme_id=${encodeURIComponent(item.id)}">
+      <div class="theme-rank">#${escapeHtml(item.rank || "—")}</div>
+      <div><span class="theme-kind">${item.kind === "INDUSTRY" ? "行业板块" : "研究板块"}</span>
+      <h3>${escapeHtml(item.name || item.id)}</h3>
+      <p>${escapeHtml(item.scored_member_count || item.member_count || 0)} 只评分股票 · ${stateLabel(item.state)}</p></div>
+      <div class="theme-score"><strong>${escapeHtml(item.score)}</strong><small>综合分</small></div>
+    </a>`
   ).join("");
   document.querySelector("#candidates-body").innerHTML = candidates.items.map((item) =>
-    `<tr><td><a href="/web/evidence?instrument_id=${encodeURIComponent(item.id)}">${escapeHtml(item.name || item.id)}</a></td><td>${escapeHtml(item.theme_id)}</td>
-    <td>${escapeHtml(item.tier)}</td><td>${escapeHtml(item.score)}</td>
+    `<tr><td><a class="stock-link" href="/web/evidence?instrument_id=${encodeURIComponent(item.id)}"><strong>${escapeHtml(item.name || item.id)}</strong><small>${escapeHtml(item.symbol || item.id)}</small></a></td>
+    <td><a href="/web/theme?theme_id=${encodeURIComponent(item.theme_id)}">${escapeHtml(item.theme_name || item.theme_id)}</a></td>
+    <td><span class="role-tag ${item.role === "LEADER" ? "leader-tag" : ""}">${roleLabel(item.role)}</span></td>
+    <td>${escapeHtml(item.tier)}</td><td><strong>${escapeHtml(item.score)}</strong></td>
     <td>${item.tradable ? "可交易" : "仅观察"}</td></tr>`
+  ).join("");
+}
+
+async function loadTheme() {
+  const themeId = new URLSearchParams(window.location.search).get("theme_id");
+  if (!themeId) throw new Error("缺少板块 ID。");
+  const [theme, stocks] = await Promise.all([
+    api(`/themes/${encodeURIComponent(themeId)}`),
+    api(`/themes/${encodeURIComponent(themeId)}/stocks?limit=500`),
+  ]);
+  document.querySelector("#theme-title").textContent = theme.name || theme.id;
+  document.querySelector("#theme-as-of").textContent = `数据截止：${theme.as_of} · ${stocks.total} 只评分股票`;
+  document.querySelector("#theme-summary").innerHTML = `
+    <div><small>主线排名</small><strong>#${escapeHtml(theme.rank)}</strong></div>
+    <div><small>行业综合分</small><strong>${escapeHtml(theme.score)}</strong></div>
+    <div><small>状态</small><strong>${stateLabel(theme.state)}</strong></div>
+    <div><small>5日中位收益</small><strong>${formatPercent(theme.median_return_5d)}</strong></div>
+    <div><small>上涨家数占比</small><strong>${formatPercent(theme.advancing_ratio)}</strong></div>`;
+  document.querySelector("#theme-stocks-body").innerHTML = stocks.items.map((item) =>
+    `<tr><td><span class="rank-number ${Number(item.rank) <= 3 ? "top-rank" : ""}">${escapeHtml(item.rank)}</span></td>
+    <td><a class="stock-link" href="/web/evidence?instrument_id=${encodeURIComponent(item.id)}"><strong>${escapeHtml(item.name || item.id)}</strong><small>${escapeHtml(item.symbol || item.id)}</small></a></td>
+    <td><span class="role-tag ${item.role === "LEADER" ? "leader-tag" : ""}">${escapeHtml(item.leader_type || roleLabel(item.role))}</span></td>
+    <td><strong>${escapeHtml(item.score)}</strong></td><td class="${Number(item.return_5d) >= 0 ? "positive" : "negative"}">${formatPercent(item.return_5d)}</td>
+    <td class="${Number(item.return_20d) >= 0 ? "positive" : "negative"}">${formatPercent(item.return_20d)}</td><td>${formatTurnover(item.turnover)}</td></tr>`
   ).join("");
 }
 
@@ -256,6 +319,7 @@ function loadPageData() {
   if (!bearerToken) return;
   const loader =
     page === "research" ? loadResearch :
+    page === "theme" ? loadTheme :
     page === "trading" ? loadTrading :
     page === "evidence" ? loadEvidence : null;
   if (loader) loader().catch((error) => setStatus(error.message));
@@ -271,5 +335,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelector("#approve")?.addEventListener("click", (event) => approveDraft(event.currentTarget));
   document.querySelector("#submit")?.addEventListener("click", (event) => submitDraft(event.currentTarget));
   document.querySelector("#send")?.addEventListener("click", sendMessage);
+  document.querySelector("#back-button")?.addEventListener("click", () => {
+    if (document.referrer) history.back();
+    else window.location.href = "/web";
+  });
   if (bootstrapped) loadPageData();
 });

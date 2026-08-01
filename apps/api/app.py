@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from apps.api.core.auth import AuthService, Principal, Role
 from apps.api.core.errors import install_error_handling
-from apps.api.core.local_bootstrap import research_catalog_from_shadow
+from apps.api.core.local_bootstrap import research_catalog_from_file
 from apps.api.core.services import (
     ApiServices,
     BacktestTaskStore,
@@ -145,7 +145,11 @@ def create_app(
         app.mount("/web/static", StaticFiles(directory=static_root), name="web-static")
 
     def page(filename: str) -> FileResponse:
-        return FileResponse(web_root / filename, media_type="text/html")
+        return FileResponse(
+            web_root / filename,
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/web", include_in_schema=False)
     def web_home() -> FileResponse:
@@ -166,6 +170,10 @@ def create_app(
     @app.get("/web/evidence", include_in_schema=False)
     def web_evidence() -> FileResponse:
         return page("evidence.html")
+
+    @app.get("/web/theme", include_in_schema=False)
+    def web_theme() -> FileResponse:
+        return page("theme.html")
 
     return app
 
@@ -203,7 +211,7 @@ def _default_services(
 
     research_path = os.getenv("QUANT_AGENT_LOCAL_RESEARCH_PATH")
     research_catalog = (
-        research_catalog_from_shadow(research_path)
+        research_catalog_from_file(research_path)
         if runtime.app_env is AppEnvironment.LOCAL and research_path
         else ResearchCatalog()
     )

@@ -10,6 +10,16 @@ from typing import Any
 from apps.api.core.services import ResearchCatalog, ResearchRecord
 
 
+def research_catalog_from_file(path: str | Path) -> ResearchCatalog:
+    """Load a supported local research snapshot without weakening production defaults."""
+
+    source = Path(path)
+    payload: dict[str, Any] = json.loads(source.read_text(encoding="utf-8"))
+    if payload.get("schema_version") == "current-industry-research-v1":
+        return _current_industry_catalog(payload)
+    return research_catalog_from_shadow(source)
+
+
 def research_catalog_from_shadow(path: str | Path) -> ResearchCatalog:
     """Build an immutable API read model from one historical-shadow analysis file."""
 
@@ -120,6 +130,92 @@ def research_catalog_from_shadow(path: str | Path) -> ResearchCatalog:
     catalog.publish("candidates", candidate_records)
     catalog.publish("leaders", candidate_records[:3])
     catalog.publish("evidence", evidence_records)
+    return catalog
+
+
+def _current_industry_catalog(payload: dict[str, Any]) -> ResearchCatalog:
+    as_of = datetime.fromisoformat(payload["as_of"])
+    data_version = str(payload["data_version"])
+    catalog = ResearchCatalog()
+    regime = payload["regime"]
+    catalog.publish_regime(
+        ResearchRecord(
+            "CN_A",
+            as_of,
+            data_version,
+            {
+                "regime": regime["name"],
+                "score": regime["score"],
+                "market_as_of": payload["market_as_of"],
+                "classification": payload["classification"],
+                "support_evidence": regime["support_evidence"],
+                "counter_evidence": regime["counter_evidence"],
+            },
+        )
+    )
+    catalog.publish(
+        "themes",
+        [
+            ResearchRecord(
+                str(item["id"]),
+                as_of,
+                data_version,
+                {key: value for key, value in item.items() if key != "id"},
+            )
+            for item in payload["themes"]
+        ],
+    )
+    catalog.publish(
+        "theme_members",
+        [
+            ResearchRecord(
+                f"{item['theme_id']}::{item['instrument_id']}",
+                as_of,
+                data_version,
+                dict(item),
+            )
+            for item in payload["theme_members"]
+        ],
+    )
+    catalog.publish(
+        "leaders",
+        [
+            ResearchRecord(
+                f"{item['theme_id']}::{item['instrument_id']}",
+                as_of,
+                data_version,
+                dict(item),
+            )
+            for item in payload["leaders"]
+        ],
+    )
+    catalog.publish(
+        "candidates",
+        [
+            ResearchRecord(
+                str(item["instrument_id"]),
+                as_of,
+                data_version,
+                {
+                    **item,
+                    "tier": "A" if index < 5 else "B" if index < 12 else "C",
+                },
+            )
+            for index, item in enumerate(payload["candidates"])
+        ],
+    )
+    catalog.publish(
+        "evidence",
+        [
+            ResearchRecord(
+                str(item["instrument_id"]),
+                as_of,
+                data_version,
+                dict(item),
+            )
+            for item in payload["evidence"]
+        ],
+    )
     return catalog
 
 

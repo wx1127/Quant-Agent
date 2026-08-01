@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quant Agent · 板块详情</title>
+  <link rel="stylesheet" href="/web/static/app.css?v=20260801">
+</head>
+<body data-page="theme">
+  <div class="shell">
+    <aside>
+      <div class="brand-lockup"><span class="brand-mark">Q</span><div><p class="brand">QUANT AGENT</p><small>Research Console</small></div></div>
+      <nav aria-label="主导航">
+        <a class="active" href="/web/research"><span>◫</span> 市场研究</a>
+        <a href="/web/trading"><span>◇</span> 组合与审批</a>
+        <a href="/web/chat"><span>◎</span> 研究对话</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar hero-bar">
+        <div>
+          <a class="ghost-button back-button" href="/web/research">← 返回市场研究</a>
+          <p class="eyebrow">Industry constituents</p>
+          <h1 id="theme-title">板块详情</h1>
+          <p id="theme-as-of" class="muted">数据截止：等待加载</p>
+        </div>
+        <div class="token-box compact-auth">
+          <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌" aria-label="访问令牌">
+          <button id="save-token">连接数据</button>
+        </div>
+      </header>
+      <p id="status" class="status-line" aria-live="polite"></p>
+      <section class="grid">
+        <article class="card span-12"><div id="theme-summary" class="metric-strip"><p class="muted">认证后加载板块摘要。</p></div></article>
+        <article class="card span-12">
+          <div class="section-head"><div><p class="eyebrow">Ranked stocks</p><h2>板块内个股评分</h2></div><small>龙头为板块内综合分前三名</small></div>
+          <div class="table-wrap"><table class="data-table">
+            <thead><tr><th>排名</th><th>股票</th><th>角色</th><th>综合分</th><th>5日收益</th><th>20日收益</th><th>成交额</th></tr></thead>
+            <tbody id="theme-stocks-body"></tbody>
+          </table></div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/web/static/app.js?v=20260801"></script>
+</body>
+</html>

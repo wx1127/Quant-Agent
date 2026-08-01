@@ -35,7 +35,7 @@ class ResearchRecord:
 class ResearchCatalog:
     """Immutable read-model snapshots for API pagination and filtering."""
 
-    _KINDS = frozenset({"themes", "leaders", "candidates", "evidence"})
+    _KINDS = frozenset({"themes", "theme_members", "leaders", "candidates", "evidence"})
 
     def __init__(self) -> None:
         self._regime: ResearchRecord | None = None
@@ -50,7 +50,7 @@ class ResearchCatalog:
         identifiers = [item.record_id for item in records]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("research record ids must be unique")
-        self._records[kind] = tuple(sorted(records, key=lambda item: item.record_id))
+        self._records[kind] = tuple(records)
 
     def regime(self) -> ResearchRecord:
         if self._regime is None:

@@ -25,6 +25,7 @@ from quant_agent.data.providers.base import (
     ProviderError,
     ProviderRequestPolicy,
 )
+from quant_agent.research.current import StockProfile
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _VOLUME_LOT_TO_SHARES = Decimal("100")
@@ -193,6 +194,44 @@ class TushareHttpProvider:
             request_params={"as_of": as_of.isoformat()},
             raw_payload=payload,
             available_at=self._available_at(as_of),
+            records=tuple(records),
+        )
+
+    def fetch_stock_profiles(self, as_of: datetime) -> ProviderBatch[StockProfile]:
+        """Fetch current listed-stock names and industries for current research only."""
+
+        if as_of.utcoffset() is None:
+            raise ValueError("stock profile as_of must be timezone-aware")
+        fields = (
+            "ts_code",
+            "name",
+            "industry",
+            "list_date",
+            "list_status",
+        )
+        payload = self._call("stock_basic", {"list_status": "L"}, fields)
+        records = []
+        for row in self._rows(payload):
+            industry = str(row.get("industry") or "").strip()
+            if not industry or str(row.get("list_status")) != "L":
+                continue
+            records.append(
+                StockProfile(
+                    instrument_id=instrument_id_from_ts_code(str(row["ts_code"])),
+                    name=str(row["name"]),
+                    industry=industry,
+                    listed_on=datetime.strptime(str(row["list_date"]), "%Y%m%d").date(),
+                    source=self.provider_name,
+                    available_at=as_of,
+                    version=as_of.isoformat(),
+                )
+            )
+        return ProviderBatch(
+            provider=self.provider_name,
+            endpoint="stock_basic",
+            request_params={"list_status": "L", "as_of": as_of.isoformat()},
+            raw_payload=payload,
+            available_at=as_of,
             records=tuple(records),
         )
 

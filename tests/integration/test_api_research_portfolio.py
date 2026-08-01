@@ -114,6 +114,24 @@ def api_fixture() -> Any:
         ],
     )
     research.publish(
+        "theme_members",
+        [
+            ResearchRecord(
+                "theme-a::000001.SZ",
+                now,
+                "market_v1",
+                {
+                    "instrument_id": "000001.SZ",
+                    "theme_id": "theme-a",
+                    "name": "示例股份",
+                    "rank": 1,
+                    "role": "LEADER",
+                    "score": 73.0,
+                },
+            )
+        ],
+    )
+    research.publish(
         "candidates",
         [
             ResearchRecord(
@@ -304,6 +322,15 @@ def test_research_pagination_filtering_and_missing_data(
     assert themes["items"][0]["id"] == "theme-a"
     assert themes["items"][0]["as_of"]
     assert themes["items"][0]["data_version"] == "market_v1"
+    theme = client.get("/v1/themes/theme-a", headers=auth_header("viewer"))
+    assert theme.status_code == 200
+    stocks = client.get(
+        "/v1/themes/theme-a/stocks",
+        headers=auth_header("viewer"),
+    ).json()["data"]
+    assert stocks["total"] == 1
+    assert stocks["items"][0]["id"] == "000001.SZ"
+    assert stocks["items"][0]["rank"] == 1
     evidence = client.get(
         "/v1/instruments/000001.SZ/evidence",
         headers=auth_header("viewer"),

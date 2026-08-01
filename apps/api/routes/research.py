@@ -44,6 +44,44 @@ def _page(
     }
 
 
+def _stock_record(item: ResearchRecord) -> dict[str, object]:
+    payload = _record(item)
+    payload["id"] = item.payload.get("instrument_id", item.record_id)
+    return payload
+
+
+def _ranked_stock_page(
+    request: Request,
+    kind: str,
+    offset: int,
+    limit: int,
+    filters: dict[str, str],
+) -> dict[str, object]:
+    rows, total = request.app.state.services.research.list(
+        kind,
+        offset=0,
+        limit=10_000,
+        filters=filters,
+    )
+    ordered = sorted(
+        rows,
+        key=lambda item: (
+            int(item.payload.get("rank", 10_000)),
+            -float(item.payload.get("score", 0)),
+            str(item.payload.get("instrument_id", item.record_id)),
+        ),
+    )
+    return {
+        "request_id": request.state.request_id,
+        "data": {
+            "items": [_stock_record(item) for item in ordered[offset : offset + limit]],
+            "offset": offset,
+            "limit": limit,
+            "total": total,
+        },
+    }
+
+
 @router.get("/market/regime")
 def market_regime(
     request: Request,
@@ -66,6 +104,16 @@ def themes(
     return _page(request, "themes", offset, limit, {"state": state} if state else {})
 
 
+@router.get("/themes/{theme_id}")
+def theme_detail(
+    request: Request,
+    theme_id: str,
+    _principal: Principal = Depends(_viewer),
+) -> dict[str, object]:
+    item = request.app.state.services.research.get("themes", theme_id)
+    return {"request_id": request.state.request_id, "data": _record(item)}
+
+
 @router.get("/themes/{theme_id}/leaders")
 def leaders(
     request: Request,
@@ -74,7 +122,31 @@ def leaders(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     _principal: Principal = Depends(_viewer),
 ) -> dict[str, object]:
-    return _page(request, "leaders", offset, limit, {"theme_id": theme_id})
+    return _ranked_stock_page(
+        request,
+        "leaders",
+        offset,
+        limit,
+        {"theme_id": theme_id},
+    )
+
+
+@router.get("/themes/{theme_id}/stocks")
+def theme_stocks(
+    request: Request,
+    theme_id: str,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    _principal: Principal = Depends(_viewer),
+) -> dict[str, object]:
+    request.app.state.services.research.get("themes", theme_id)
+    return _ranked_stock_page(
+        request,
+        "theme_members",
+        offset,
+        limit,
+        {"theme_id": theme_id},
+    )
 
 
 @router.get("/candidates")
