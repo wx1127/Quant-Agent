@@ -163,6 +163,32 @@ def api_fixture() -> Any:
             )
         ],
     )
+    research.publish(
+        "stock_details",
+        [
+            ResearchRecord(
+                "000001.SZ",
+                now,
+                "market_v1",
+                {
+                    "name": "示例股份",
+                    "symbol": "000001",
+                    "trade_date": "2026-07-31",
+                    "latest_price": 12.3,
+                    "previous_close": 12.0,
+                    "change": 0.3,
+                    "change_pct": 0.025,
+                    "open": 12.0,
+                    "high": 12.5,
+                    "low": 11.9,
+                    "close": 12.3,
+                    "volume": 100000,
+                    "turnover": 1230000,
+                    "bars": [{"trade_date": "2026-07-31", "close": 12.3}],
+                },
+            )
+        ],
+    )
 
     runner_release = Event()
 
@@ -336,6 +362,13 @@ def test_research_pagination_filtering_and_missing_data(
         headers=auth_header("viewer"),
     )
     assert evidence.status_code == 200
+    detail = client.get(
+        "/v1/instruments/000001.SZ",
+        headers=auth_header("viewer"),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["data"]["latest_price"] == 12.3
+    assert detail.json()["data"]["bars"][0]["trade_date"] == "2026-07-31"
     missing = client.get(
         "/v1/instruments/999999.SZ/evidence",
         headers=auth_header("viewer"),

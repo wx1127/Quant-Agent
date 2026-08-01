@@ -172,3 +172,13 @@ def instrument_evidence(
 ) -> dict[str, object]:
     item = request.app.state.services.research.get("evidence", instrument_id)
     return {"request_id": request.state.request_id, "data": _record(item)}
+
+
+@router.get("/instruments/{instrument_id}")
+def instrument_detail(
+    request: Request,
+    instrument_id: str,
+    _principal: Principal = Depends(_viewer),
+) -> dict[str, object]:
+    item = request.app.state.services.research.get("stock_details", instrument_id)
+    return {"request_id": request.state.request_id, "data": _record(item)}

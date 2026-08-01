@@ -164,6 +164,9 @@ def test_reconciliation_uses_service_and_web_pages_expose_safety_controls(
     assert "点击行业查看全部成分股评分" in research.text
     assert "板块内个股评分" in theme.text
     assert "返回市场研究" in theme.text
+    assert "日 K 线" in evidence.text
+    assert "成交额" in evidence.text
+    assert "/web/static/app.js?v=20260801-kline" in evidence.text
     assert "风险警告（始终显示）" in trading.text
     assert "审批不能由 Agent 代替" in trading.text
     assert "回测中心" in trading.text and "组合中心" in trading.text
@@ -172,5 +175,6 @@ def test_reconciliation_uses_service_and_web_pages_expose_safety_controls(
     web_script = client.get("/web/static/app.js").text
     assert "localStorage" not in web_script
     assert "sessionStorage" in web_script
+    assert "drawKline" in web_script
     assert "button.dataset.idempotencyKey" in web_script
     assert TOKENS["approver"] not in trading.text

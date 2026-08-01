@@ -35,7 +35,9 @@ class ResearchRecord:
 class ResearchCatalog:
     """Immutable read-model snapshots for API pagination and filtering."""
 
-    _KINDS = frozenset({"themes", "theme_members", "leaders", "candidates", "evidence"})
+    _KINDS = frozenset(
+        {"themes", "theme_members", "leaders", "candidates", "evidence", "stock_details"}
+    )
 
     def __init__(self) -> None:
         self._regime: ResearchRecord | None = None

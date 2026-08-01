@@ -138,6 +138,7 @@ def main() -> int:
                 "theme_members": len(snapshot["theme_members"]),
                 "leaders": len(snapshot["leaders"]),
                 "candidates": len(snapshot["candidates"]),
+                "stock_details": len(snapshot["stock_details"]),
                 "data_version": snapshot["data_version"],
             },
             ensure_ascii=False,

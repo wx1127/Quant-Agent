@@ -18,4 +18,5 @@ FastAPI 入口为 `apps.api.app:app`。开发环境启动：
 - `/v1/themes/{theme_id}/stocks`：板块内全部评分股票；
 - `/v1/themes/{theme_id}/leaders`：板块内龙头个股；
 - `/v1/candidates`：跨领先板块候选个股；
+- `/v1/instruments/{instrument_id}`：个股最新价格、当日行情与最近 25 个交易日日线；
 - `/v1/instruments/{instrument_id}/evidence`：个股证据与失效条件。

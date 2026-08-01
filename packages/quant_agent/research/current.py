@@ -107,6 +107,7 @@ class CurrentIndustryResearchEngine:
         for member in theme_members:
             member["selected_candidate"] = str(member["instrument_id"]) in candidate_ids
         evidence = [_stock_evidence(member) for member in theme_members]
+        stock_details = stock_details_from_members(theme_members, history)
         canonical_input = {
             "market_date": market_date.isoformat(),
             "bar_versions": sorted({bar.version for bar in eligible_bars}),
@@ -128,7 +129,66 @@ class CurrentIndustryResearchEngine:
             "leaders": leaders,
             "candidates": candidates,
             "evidence": evidence,
+            "stock_details": stock_details,
         }
+
+
+def stock_details_from_members(
+    theme_members: list[dict[str, Any]],
+    history: dict[str, list[DailyBar]],
+    *,
+    bar_limit: int = 25,
+) -> list[dict[str, Any]]:
+    """Create compact, serializable stock details from point-in-time daily bars."""
+    if bar_limit < 2:
+        raise ValueError("stock detail requires at least two bars")
+    details: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for member in theme_members:
+        instrument_id = str(member["instrument_id"])
+        if instrument_id in seen or instrument_id not in history:
+            continue
+        seen.add(instrument_id)
+        series = history[instrument_id][-bar_limit:]
+        if not series:
+            continue
+        latest = series[-1]
+        previous_close = series[-2].close if len(series) >= 2 else latest.close
+        change = latest.close - previous_close
+        change_pct = float(change / previous_close) if previous_close else 0.0
+        details.append(
+            {
+                "instrument_id": instrument_id,
+                "symbol": member.get("symbol", instrument_id.rsplit(".", maxsplit=1)[-1]),
+                "name": member.get("name", instrument_id),
+                "theme_id": member.get("theme_id"),
+                "theme_name": member.get("theme_name"),
+                "trade_date": latest.trade_date.isoformat(),
+                "latest_price": float(latest.close),
+                "previous_close": float(previous_close),
+                "change": round(float(change), 4),
+                "change_pct": round(change_pct, 6),
+                "open": float(latest.open),
+                "high": float(latest.high),
+                "low": float(latest.low),
+                "close": float(latest.close),
+                "volume": float(latest.volume),
+                "turnover": float(latest.turnover),
+                "bars": [
+                    {
+                        "trade_date": bar.trade_date.isoformat(),
+                        "open": float(bar.open),
+                        "high": float(bar.high),
+                        "low": float(bar.low),
+                        "close": float(bar.close),
+                        "volume": float(bar.volume),
+                        "turnover": float(bar.turnover),
+                    }
+                    for bar in series
+                ],
+            }
+        )
+    return details
 
 
 def _returns(series: list[DailyBar]) -> tuple[float, float] | None:

@@ -115,6 +115,31 @@ def test_local_catalog_loads_current_industry_snapshot(tmp_path: Path) -> None:
                 "invalidations": ["行业退潮"],
             }
         ],
+        "stock_details": [
+            {
+                "instrument_id": "CN.SH.600001",
+                "name": "示例股份",
+                "symbol": "600001",
+                "theme_id": "industry-a",
+                "theme_name": "机器人",
+                "trade_date": "2026-07-31",
+                "latest_price": 12.3,
+                "previous_close": 12.0,
+                "change": 0.3,
+                "change_pct": 0.025,
+                "bars": [
+                    {
+                        "trade_date": "2026-07-31",
+                        "open": 12.0,
+                        "high": 12.5,
+                        "low": 11.9,
+                        "close": 12.3,
+                        "volume": 100000,
+                        "turnover": 1230000,
+                    }
+                ],
+            }
+        ],
     }
     path = tmp_path / "research-current.json"
     path.write_text(json.dumps(snapshot), encoding="utf-8")
@@ -130,3 +155,6 @@ def test_local_catalog_loads_current_industry_snapshot(tmp_path: Path) -> None:
     )
     assert total == 1
     assert members[0].payload["instrument_id"] == "CN.SH.600001"
+    detail = catalog.get("stock_details", "CN.SH.600001")
+    assert detail.payload["latest_price"] == 12.3
+    assert detail.payload["bars"][0]["trade_date"] == "2026-07-31"

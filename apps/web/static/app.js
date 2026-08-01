@@ -101,6 +101,116 @@ function formatTurnover(value) {
   return number.toFixed(0);
 }
 
+function formatPrice(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "—";
+}
+
+function formatVolume(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 亿股`;
+  if (number >= 10000) return `${(number / 10000).toFixed(2)} 万股`;
+  return `${number.toFixed(0)} 股`;
+}
+
+let lastKlineBars = [];
+
+function drawKline(bars) {
+  const canvas = document.querySelector("#kline-chart");
+  if (!canvas || !bars?.length) return;
+  lastKlineBars = bars;
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(rect.width * ratio));
+  canvas.height = Math.max(1, Math.round(rect.height * ratio));
+  const context = canvas.getContext("2d");
+  context.scale(ratio, ratio);
+  const width = rect.width;
+  const height = rect.height;
+  const padding = {top: 20, right: 58, bottom: 30, left: 16};
+  const volumeHeight = 70;
+  const priceBottom = height - padding.bottom - volumeHeight - 16;
+  const highs = bars.map((item) => Number(item.high));
+  const lows = bars.map((item) => Number(item.low));
+  const maxPrice = Math.max(...highs);
+  const minPrice = Math.min(...lows);
+  const priceSpan = Math.max(maxPrice - minPrice, maxPrice * 0.01, 0.01);
+  const plotWidth = width - padding.left - padding.right;
+  const slot = plotWidth / bars.length;
+  const candleWidth = Math.max(3, Math.min(12, slot * 0.58));
+  const yPrice = (value) => padding.top + (maxPrice - value) / priceSpan * (priceBottom - padding.top);
+  context.font = "11px system-ui, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  for (let index = 0; index <= 4; index += 1) {
+    const y = padding.top + (priceBottom - padding.top) * index / 4;
+    const label = maxPrice - priceSpan * index / 4;
+    context.strokeStyle = "rgba(133, 151, 181, 0.16)";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(padding.left, y);
+    context.lineTo(width - padding.right, y);
+    context.stroke();
+    context.fillStyle = "#8090aa";
+    context.fillText(label.toFixed(2), width - padding.right + 7, y);
+  }
+  bars.forEach((bar, index) => {
+    const x = padding.left + slot * (index + 0.5);
+    const open = Number(bar.open);
+    const close = Number(bar.close);
+    const rising = close >= open;
+    const color = rising ? "#f05b67" : "#39c98a";
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(x, yPrice(Number(bar.high)));
+    context.lineTo(x, yPrice(Number(bar.low)));
+    context.stroke();
+    const bodyTop = Math.min(yPrice(open), yPrice(close));
+    const bodyHeight = Math.max(1.5, Math.abs(yPrice(open) - yPrice(close)));
+    context.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+  });
+  const maxVolume = Math.max(...bars.map((item) => Number(item.volume)), 1);
+  const volumeTop = priceBottom + 16;
+  bars.forEach((bar, index) => {
+    const x = padding.left + slot * (index + 0.5);
+    const volume = Number(bar.volume);
+    const barHeight = volume / maxVolume * volumeHeight;
+    context.fillStyle = Number(bar.close) >= Number(bar.open)
+      ? "rgba(240, 91, 103, 0.48)" : "rgba(57, 201, 138, 0.48)";
+    context.fillRect(x - candleWidth / 2, height - padding.bottom - barHeight, candleWidth, barHeight);
+  });
+  const labelIndexes = [...new Set([0, Math.floor((bars.length - 1) / 2), bars.length - 1])];
+  context.fillStyle = "#8090aa";
+  labelIndexes.forEach((index) => {
+    const x = padding.left + slot * (index + 0.5);
+    context.textAlign = index === 0 ? "left" : index === bars.length - 1 ? "right" : "center";
+    context.fillText(bars[index].trade_date.slice(5), x, height - 11);
+  });
+}
+
+function renderStockDetail(item) {
+  document.querySelector("#evidence-title").textContent = item.name || item.id;
+  document.querySelector("#stock-symbol").textContent = `${item.symbol || item.id} · ${item.theme_name || "未分类"}`;
+  document.querySelector("#latest-price").textContent = formatPrice(item.latest_price);
+  const priceChange = document.querySelector("#price-change");
+  const changeClass = Number(item.change) >= 0 ? "positive" : "negative";
+  priceChange.className = `price-change ${changeClass}`;
+  priceChange.textContent = `${Number(item.change) >= 0 ? "+" : ""}${formatPrice(item.change)}  ${Number(item.change_pct) >= 0 ? "+" : ""}${formatPercent(item.change_pct)}`;
+  document.querySelector("#stock-open").textContent = formatPrice(item.open);
+  document.querySelector("#stock-high").textContent = formatPrice(item.high);
+  document.querySelector("#stock-low").textContent = formatPrice(item.low);
+  document.querySelector("#stock-previous-close").textContent = formatPrice(item.previous_close);
+  document.querySelector("#stock-volume").textContent = formatVolume(item.volume);
+  document.querySelector("#stock-turnover").textContent = formatTurnover(item.turnover);
+  const bars = item.bars || [];
+  document.querySelector("#kline-range").textContent = bars.length
+    ? `${bars[0].trade_date} 至 ${bars[bars.length - 1].trade_date}` : "暂无行情";
+  drawKline(bars);
+}
+
 async function loadResearch() {
   const [regime, themes, candidates] = await Promise.all([
     api("/market/regime"),
@@ -197,11 +307,15 @@ async function loadEvidence() {
   const instrumentId = field.value.trim();
   if (!instrumentId) return setStatus("请填写证券 ID。");
   try {
-    const item = await api(`/instruments/${encodeURIComponent(instrumentId)}/evidence`);
-    document.querySelector("#evidence-title").textContent = item.name || item.id;
-    document.querySelector("#evidence-as-of").textContent = `数据截止：${item.as_of} · ${item.data_version}`;
-    document.querySelector("#evidence-detail").innerHTML = evidenceBlock(item) +
-      `<p><strong>失效条件</strong>：${escapeHtml((item.invalidations || []).join("；") || "证据不足")}</p>`;
+    const [detail, evidence] = await Promise.all([
+      api(`/instruments/${encodeURIComponent(instrumentId)}`),
+      api(`/instruments/${encodeURIComponent(instrumentId)}/evidence`),
+    ]);
+    renderStockDetail(detail);
+    document.querySelector("#evidence-as-of").textContent = `行情截止：${detail.trade_date} · 研究快照：${detail.as_of}`;
+    document.querySelector("#evidence-detail").innerHTML = evidenceBlock(evidence) +
+      `<p><strong>失效条件</strong>：${escapeHtml((evidence.invalidations || []).join("；") || "证据不足")}</p>`;
+    setStatus("");
   } catch (error) {
     setStatus(error.message);
   }
@@ -340,4 +454,8 @@ document.addEventListener("DOMContentLoaded", () => {
     else window.location.href = "/web";
   });
   if (bootstrapped) loadPageData();
+});
+
+window.addEventListener("resize", () => {
+  if (lastKlineBars.length) drawKline(lastKlineBars);
 });

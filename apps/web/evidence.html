@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Quant Agent · 个股证据</title>
-  <link rel="stylesheet" href="/web/static/app.css?v=20260801">
+  <title>Quant Agent · 个股详情</title>
+  <link rel="stylesheet" href="/web/static/app.css?v=20260801-kline">
 </head>
 <body data-page="evidence">
   <div class="shell">
@@ -19,7 +19,7 @@
     <main>
       <header class="topbar">
         <div><a class="ghost-button back-button" href="/web/research">← 返回市场研究</a>
-          <p class="eyebrow">Instrument evidence</p><h1 id="evidence-title">个股证据</h1>
+          <p class="eyebrow">Instrument detail</p><h1 id="evidence-title">个股详情</h1>
           <p id="evidence-as-of" class="muted">数据截止：等待加载</p></div>
         <div class="token-box">
           <input id="api-token" type="password" autocomplete="off" placeholder="本次会话访问令牌">
@@ -31,14 +31,36 @@
         <article class="card span-12">
           <div class="section-head"><h2>股票查询</h2>
             <div class="token-box"><input id="instrument-id" placeholder="000001.SZ">
-              <button id="load-evidence">加载证据</button></div></div>
+              <button id="load-evidence">查看个股</button></div></div>
         </article>
-        <article class="card span-12" id="evidence-detail">
-          <p class="muted">支持证据、反对证据、风险和失效条件将在此同时展示。</p>
+        <article class="card span-12 stock-overview">
+          <div class="price-heading">
+            <div><p class="muted" id="stock-symbol">—</p><strong id="latest-price">—</strong></div>
+            <div id="price-change" class="price-change">—</div>
+          </div>
+          <div class="metric-strip stock-metrics">
+            <div><small>今开</small><strong id="stock-open">—</strong></div>
+            <div><small>最高</small><strong id="stock-high">—</strong></div>
+            <div><small>最低</small><strong id="stock-low">—</strong></div>
+            <div><small>昨收</small><strong id="stock-previous-close">—</strong></div>
+            <div><small>成交量</small><strong id="stock-volume">—</strong></div>
+            <div><small>成交额</small><strong id="stock-turnover">—</strong></div>
+          </div>
+        </article>
+        <article class="card span-12 kline-card">
+          <div class="section-head"><div><h2>日 K 线</h2><p class="muted">最近最多 25 个交易日 · 红涨绿跌</p></div>
+            <p class="muted" id="kline-range">—</p></div>
+          <div class="chart-wrap"><canvas id="kline-chart" aria-label="个股日K线图"></canvas></div>
+        </article>
+        <article class="card span-12">
+          <div class="section-head"><h2>研究证据与失效条件</h2></div>
+          <div id="evidence-detail">
+            <p class="muted">支持证据、反对证据、风险和失效条件将在此同时展示。</p>
+          </div>
         </article>
       </section>
     </main>
   </div>
-  <script src="/web/static/app.js?v=20260801"></script>
+  <script src="/web/static/app.js?v=20260801-kline"></script>
 </body>
 </html>

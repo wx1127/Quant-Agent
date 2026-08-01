@@ -216,6 +216,18 @@ def _current_industry_catalog(payload: dict[str, Any]) -> ResearchCatalog:
             for item in payload["evidence"]
         ],
     )
+    catalog.publish(
+        "stock_details",
+        [
+            ResearchRecord(
+                str(item["instrument_id"]),
+                as_of,
+                data_version,
+                dict(item),
+            )
+            for item in payload.get("stock_details", [])
+        ],
+    )
     return catalog
 
 

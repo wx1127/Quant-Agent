@@ -71,6 +71,15 @@ def test_current_research_ranks_industries_and_stocks() -> None:
     assert robot_members[0]["score"] > robot_members[1]["score"]
     assert snapshot["candidates"]
     assert all(item["instrument_id"].startswith("CN.") for item in snapshot["leaders"])
+    assert len(snapshot["stock_details"]) == 4
+    robot_detail = next(
+        item for item in snapshot["stock_details"] if item["instrument_id"] == "CN.SH.600001"
+    )
+    assert robot_detail["latest_price"] == pytest.approx(float(bars[20].close))
+    assert robot_detail["previous_close"] < robot_detail["latest_price"]
+    assert robot_detail["change_pct"] > 0
+    assert len(robot_detail["bars"]) == 21
+    assert robot_detail["bars"][0]["trade_date"] == start.isoformat()
 
 
 def test_current_research_rejects_unavailable_inputs() -> None:
