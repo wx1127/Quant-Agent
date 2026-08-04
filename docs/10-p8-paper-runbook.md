@@ -42,7 +42,11 @@ $env:MARKET_DATA_TOKEN_FILE = 'D:\DevelopTool\Quant-Agent\secrets\market_data_to
 
 ## 4. 调度与复核
 
-- 项目级自动任务在工作日收盘后运行上述入口；
+- Windows 任务计划 `Quant-Agent-P8-Paper` 在每个工作日 16:00 启动
+  `scripts/paper/run_scheduled.ps1`；
+- 调度进程从16:00开始，等待至16:05点时数据安全门禁后调用日终入口；
+- 任务设置为错过计划时间后尽快启动、禁止并发重复实例，并记录退出码及调度状态；
+- Codex 自动任务不再承担执行，只在16:45巡检当天成功或失败证据；
 - 每次运行先核对前一交易日是否存在成功或失败证据；
 - 缺少两者时必须追加“调度缺失”失败记录并告警；
 - 自动任务不得执行 Git 合并、不得推送 `main`；
