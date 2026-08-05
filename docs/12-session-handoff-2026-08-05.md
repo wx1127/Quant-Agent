@@ -29,13 +29,7 @@ git status --short --branch
 git log -8 --oneline --decorate
 ```
 
-截至交接时，分支与远程同步，唯一未跟踪文件为：
-
-```text
-scripts/paper/_recalculate_20260805_once.py
-```
-
-这是等待 Tushare 限频恢复后执行的一次性重算脚本，不是遗留垃圾文件。单次自动重算完成后才可删除。
+截至最新更新，一次性重算脚本已经成功执行并删除；正常情况下工作区不应再出现 `_recalculate_20260805_once.py`。
 
 ## 3. 不可违反的安全与证据规则
 
@@ -162,29 +156,32 @@ P8 主线必须使用当日冻结的 Tushare 行业字段，不得使用“沪�
 
 当天买入的 A 股不能同日卖出，但可以生成下一交易日卖出草稿；状态为 `READY_AFTER_T_PLUS_ONE_RELEASE`，次日执行前由 `PaperBroker` 解冻。
 
-## 8. 尚未完成的一次性重算
+## 8. 已完成的一次性重算
 
 用户曾要求“重新生成今天的候选股票模拟订单”。新规则重算需要完整 Tushare `stock_basic` 行业快照，首次请求因接口每小时一次的频率限制失败，且没有生成伪证据或部分成功文件。
 
-为此创建了单次 heartbeat 自动任务：
+为此创建的单次 heartbeat 自动任务已成功完成：
 
 - Automation ID：`8-5-paper`
-- 状态：`ACTIVE`
+- 状态：单次执行完成后已删除，不再有后续运行
 - 目标：限频恢复后运行 `scripts/paper/_recalculate_20260805_once.py`
 - 输出目录：`data/paper/p8-t08/recalculations/`
 - 预期文件：
   - `2026-08-05-rules-v2.json`
   - `instruments-2026-08-05-rules-v2.json`
 
-重算只生成 `PAPER_PREVIEW`，不得覆盖 8 月 5 日原 `days/accounts/pending/reports`。若仍限频，必须明确记录失败，不得使用仅覆盖 490 只股票的 8 月 1 日研究快照冒充全市场行业数据。
+重算使用 25 个冻结交易日行情和 5,537 只股票行业快照，只生成 `PAPER_PREVIEW`，没有覆盖 8 月 5 日原 `days/accounts/pending/reports`，也没有修改 8 月 6 日人工退出覆盖单。
 
-自动任务成功后：
+重算结果：
 
-1. 核对候选均已通过前置过滤；
-2. 核对重算草稿与人工创业板退出覆盖单互不覆盖；
-3. 删除一次性脚本 `scripts/paper/_recalculate_20260805_once.py`；
-4. 保留 `recalculations/` 中 append-only 证据；
-5. 如有代码或文档变化，提交并推送 feature 分支。
+- 行业主线前两名：铅锌、软件服务；
+- 合规候选 10 只：泛微网络、北投科技、税友股份、盛达资源、用友网络、博彦科技、浪潮软件、达实智能、金徽股份、久其软件；
+- 前置过滤项：204 只；
+- 预览草稿：卖出原 5 只创业板持仓，并买入泛微网络 3,400 股；
+- 预览退出原因：陇神戎发、米奥会展、中红医疗为行业主线退出，科蓝软件、普联软件为候选轮动退出；
+- 实际调度仍使用 `pending_overrides/2026-08-06.json`，因此只执行 5 笔创业板卖出，不执行预览中的泛微网络买入。
+
+原 8 月 5 日草稿哈希及人工退出覆盖单哈希均保持不变。一次性脚本已删除，`recalculations/` 中证据必须继续保留。
 
 ## 9. 调度状态
 
@@ -227,7 +224,7 @@ Codex 自动任务 `quant-agent-p8` 在工作日 16:45 只负责结果巡检，�
 
 1. 阅读本文件、`docs/04-project-progress.md`、`docs/10-p8-paper-runbook.md` 和 `docs/11-p8-daily-profit-report.md`。
 2. 执行 `git status --short --branch`，确认位于 `feature/p8-paper-validation`。
-3. 检查 automation `8-5-paper` 是否已成功生成重算证据；若成功，按第 8 节完成清理和核对。
+3. 检查第 8 节的重算证据仍存在，确认它只作为预览且没有进入实际调度。
 4. 检查覆盖单存在且仍包含 5 笔、合计 52,900 股卖单。
 5. 重新调用 `scripts.paper.run_daily._pending(...)` 验证 2026-08-06 选择的是覆盖单。
 
