@@ -3,7 +3,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from quant_agent.data.domain import DailyBar
-from quant_agent.paper_validation.daily import PaperDailyEngine
+from quant_agent.paper_validation.daily import PaperDailyEngine, _buy_exclusion_reason
 from quant_agent.portfolio.snapshots import AccountSnapshot
 
 TZ = ZoneInfo("Asia/Shanghai")
@@ -37,6 +37,8 @@ def _bars_with_excluded_buys(start: date, count: int) -> tuple[DailyBar, ...]:
     rows = []
     definitions = (
         ("CN.SZ.300001", 0.05),
+        ("CN.SH.688001", 0.048),
+        ("CN.BJ.920001", 0.047),
         ("CN.HK.00700", 0.045),
         ("CN.SH.600001", 0.03),
         ("CN.SZ.000001", 0.025),
@@ -144,6 +146,8 @@ def test_daily_paper_excludes_chinext_and_hong_kong_buys() -> None:
         pending=None,
         instrument_names={
             "CN.SZ.300001": "创业样本",
+            "CN.SH.688001": "科创样本",
+            "CN.BJ.920001": "北交样本",
             "CN.HK.00700": "港股样本",
             "CN.SH.600001": "主板甲",
             "CN.SZ.000001": "主板乙",
@@ -152,11 +156,27 @@ def test_daily_paper_excludes_chinext_and_hong_kong_buys() -> None:
 
     draft = record["next_day_order_draft"]
     assert "CN.SZ.300001" not in draft["candidate_ids"]
+    assert "CN.SH.688001" not in draft["candidate_ids"]
+    assert "CN.BJ.920001" not in draft["candidate_ids"]
     assert "CN.HK.00700" not in draft["candidate_ids"]
+    excluded_ids = {"CN.SZ.300001", "CN.SH.688001", "CN.BJ.920001", "CN.HK.00700"}
     assert all(
-        item["instrument_id"] not in {"CN.SZ.300001", "CN.HK.00700"}
+        item["instrument_id"] not in excluded_ids
         for item in draft["batch"]["drafts"]
     )
     excluded = {item["name"]: item["reason"] for item in draft["excluded_buy_candidates"]}
-    assert excluded["创业样本"] == "ChiNext stock is excluded from PAPER buys"
-    assert excluded["港股样本"] == "hong kong stock is excluded from PAPER buys"
+    assert excluded["创业样本"] == "daily price limit above 10% is excluded from PAPER buys"
+    assert excluded["科创样本"] == "daily price limit above 10% is excluded from PAPER buys"
+
+
+def test_buy_exclusion_reason_blocks_all_price_limit_above_10_percent_boards() -> None:
+    reason = "daily price limit above 10% is excluded from PAPER buys"
+
+    assert _buy_exclusion_reason("CN.SZ.300001") == reason
+    assert _buy_exclusion_reason("CN.SZ.301001") == reason
+    assert _buy_exclusion_reason("CN.SH.688001") == reason
+    assert _buy_exclusion_reason("CN.SH.689001") == reason
+    assert _buy_exclusion_reason("CN.BJ.920001") == reason
+    assert _buy_exclusion_reason("CN.HK.00700") == "hong kong stock is excluded from PAPER buys"
+    assert _buy_exclusion_reason("CN.SH.600001") is None
+    assert _buy_exclusion_reason("CN.SZ.000001") is None

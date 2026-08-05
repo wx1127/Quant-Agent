@@ -225,8 +225,12 @@ def _buy_exclusion_reason(instrument_id: str) -> str | None:
         return "invalid instrument identifier"
     if exchange == "HK":
         return "hong kong stock is excluded from PAPER buys"
+    if country == "CN" and exchange == "BJ":
+        return "daily price limit above 10% is excluded from PAPER buys"
+    if country == "CN" and exchange == "SH" and symbol.startswith(("688", "689")):
+        return "daily price limit above 10% is excluded from PAPER buys"
     if country == "CN" and exchange == "SZ" and symbol.startswith(("300", "301")):
-        return "ChiNext stock is excluded from PAPER buys"
+        return "daily price limit above 10% is excluded from PAPER buys"
     return None
 
 

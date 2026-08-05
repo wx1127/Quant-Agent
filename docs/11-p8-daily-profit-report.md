@@ -58,7 +58,10 @@ blocking the PAPER run.
 
 P8 PAPER buy drafts must exclude:
 
-- ChiNext stocks: `CN.SZ.300*` and `CN.SZ.301*`.
+- Stocks whose daily price limit is above 10%:
+  - ChiNext: `CN.SZ.300*` and `CN.SZ.301*`.
+  - STAR Market: `CN.SH.688*` and `CN.SH.689*`.
+  - Beijing Stock Exchange: `CN.BJ.*`.
 - Hong Kong stocks: instruments whose exchange segment is `HK`.
 
 These are hard buy filters. If the strongest candidates are all excluded, the
@@ -69,8 +72,8 @@ backfilled; the rule applies to newly generated buy drafts.
 
 - Daily report includes close-marked PnL and next-day draft orders.
 - Fills, holdings, candidates, and drafts include stock names.
-- ChiNext and Hong Kong candidates are listed in `excluded_buy_candidates` and do
-  not enter buy drafts.
+- Stocks with daily price limits above 10% and Hong Kong candidates are listed in
+  `excluded_buy_candidates` and do not enter buy drafts.
 - Same-day close data is not used to create same-day fills.
 - Pending drafts with display-only `name` fields can still be read and executed.
 - Tests, lint, and type checks pass.
