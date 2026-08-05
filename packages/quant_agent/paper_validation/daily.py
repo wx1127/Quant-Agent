@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import statistics
 from dataclasses import asdict
 from datetime import date, datetime, time
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -19,7 +21,16 @@ from quant_agent.shadow.historical import HistoricalShadowEngine
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _FEE = FeeSchedule("paper-fee-v1", date(2023, 8, 28), 0.0003, 5.0, 0.0005, 5.0)
-_EXCLUDED_BUY_RULE_VERSION = "p8-paper-buy-exclusions-v1"
+_EXCLUDED_BUY_RULE_VERSION = "p8-paper-buy-exclusions-v2"
+_EXIT_RULE_VERSION = "p8-paper-exit-rules-v1"
+_STOP_LOSS = -0.08
+_TAKE_PROFIT = 0.20
+_TRAIL_ACTIVATION = 0.10
+_TRAIL_DRAWDOWN = -0.08
+_GAP_DOWN = -0.05
+_VOLUME_SELL_OFF = -0.07
+_VOLUME_SPIKE = 1.5
+_MAX_HOLDING_DAYS = 20
 
 
 class PaperDailyEngine:
@@ -44,15 +55,28 @@ class PaperDailyEngine:
         if any(item.available_at > observed_at for item in bars):
             raise ValueError("future market data cannot enter paper validation")
 
-        analysis = HistoricalShadowEngine().run_day(trading_date, bars)
+        analysis = HistoricalShadowEngine(candidate_exclusion=_candidate_exclusion).run_day(
+            trading_date, bars
+        )
         names = instrument_names or {}
         beginning_account = _mark_account(account, current, observed_at)
         execution = self._execute_pending(pending, beginning_account, current, trading_date)
         account_after = _mark_account(execution["account"], current, observed_at)
-        drafts = _build_next_day_drafts(
-            analysis.details["candidates"],
+        position_state = _update_position_state(
+            pending,
             account_after,
             current,
+            execution["fills"],
+            trading_date,
+        )
+        drafts = _build_next_day_drafts(
+            analysis.details["candidates"],
+            analysis.details["candidate_exclusions"],
+            account_after,
+            current,
+            bars,
+            analysis.evidence.mainline_ids,
+            position_state,
             trading_date,
             next_trading_date,
         )
@@ -71,6 +95,9 @@ class PaperDailyEngine:
                 "regime": analysis.details["regime"],
                 "mainlines": analysis.details["mainlines"],
                 "candidates": _named_rows(analysis.details["candidates"], names),
+                "candidate_exclusions": _named_rows(
+                    analysis.details["candidate_exclusions"], names
+                ),
             },
             "execution": _named_execution(
                 {key: value for key, value in execution.items() if key != "account"},
@@ -140,35 +167,42 @@ class PaperDailyEngine:
 
 def _build_next_day_drafts(
     candidate_rows: object,
+    exclusion_rows: object,
     account: AccountSnapshot,
     current: tuple[DailyBar, ...],
+    bars: tuple[DailyBar, ...],
+    mainline_ids: tuple[str, ...],
+    position_state: dict[str, dict[str, Any]],
     signal_date: date,
     execute_on: date,
 ) -> dict[str, Any]:
     candidates = list(candidate_rows) if isinstance(candidate_rows, list) else []
-    excluded = [
-        {
-            "instrument_id": str(item["instrument_id"]),
-            "reason": _buy_exclusion_reason(str(item["instrument_id"])),
-        }
-        for item in candidates
-        if isinstance(item, dict)
-        and "instrument_id" in item
-        and _buy_exclusion_reason(str(item["instrument_id"])) is not None
-    ]
+    excluded = list(exclusion_rows) if isinstance(exclusion_rows, list) else []
     selected = [
         str(item["instrument_id"])
         for item in candidates
         if isinstance(item, dict)
         and "instrument_id" in item
-        and _buy_exclusion_reason(str(item["instrument_id"])) is None
     ][:5]
     prices = {item.instrument_id: float(item.close) for item in current}
     holdings = {item.instrument_id: item for item in account.holdings}
+    history = _history_by_instrument(bars, signal_date)
+    exit_signals = _evaluate_exit_rules(
+        holdings,
+        history,
+        set(mainline_ids),
+        set(selected),
+        position_state,
+    )
     created_at = datetime.combine(signal_date, time(16, 5), tzinfo=_SHANGHAI)
     drafts: list[OrderDraft] = []
     for instrument_id, holding in sorted(holdings.items()):
-        if instrument_id in selected or holding.available_quantity < 100:
+        signal = exit_signals.get(instrument_id)
+        if (
+            signal is None
+            or holding.available_quantity < 100
+            or instrument_id not in prices
+        ):
             continue
         quantity = holding.available_quantity - holding.available_quantity % 100
         drafts.append(
@@ -214,11 +248,18 @@ def _build_next_day_drafts(
         "candidate_ids": selected,
         "excluded_buy_candidates": excluded,
         "buy_exclusion_rule_version": _EXCLUDED_BUY_RULE_VERSION,
+        "exit_rule_version": _EXIT_RULE_VERSION,
+        "exit_signals": list(exit_signals.values()),
+        "position_state": position_state,
         "batch": _batch_to_mapping(batch),
     }
 
 
-def _buy_exclusion_reason(instrument_id: str) -> str | None:
+def _buy_exclusion_reason(
+    instrument_id: str,
+    *,
+    daily_return: Decimal | None = None,
+) -> str | None:
     try:
         country, exchange, symbol = instrument_id.split(".", maxsplit=2)
     except ValueError:
@@ -231,7 +272,220 @@ def _buy_exclusion_reason(instrument_id: str) -> str | None:
         return "daily price limit above 10% is excluded from PAPER buys"
     if country == "CN" and exchange == "SZ" and symbol.startswith(("300", "301")):
         return "daily price limit above 10% is excluded from PAPER buys"
+    if daily_return is not None and abs(daily_return) > Decimal("0.10"):
+        return "absolute daily return above 10% is excluded before candidate ranking"
     return None
+
+
+def _candidate_exclusion(item: DailyBar, series: list[DailyBar]) -> str | None:
+    daily_return = item.close / series[-2].close - 1 if len(series) >= 2 else None
+    return _buy_exclusion_reason(item.instrument_id, daily_return=daily_return)
+
+
+def _history_by_instrument(
+    bars: tuple[DailyBar, ...], signal_date: date
+) -> dict[str, list[DailyBar]]:
+    history: dict[str, list[DailyBar]] = {}
+    for item in sorted(bars, key=lambda value: (value.trade_date, value.instrument_id)):
+        if item.trade_date <= signal_date:
+            history.setdefault(item.instrument_id, []).append(item)
+    return history
+
+
+def _update_position_state(
+    pending: dict[str, Any] | None,
+    account: AccountSnapshot,
+    current: tuple[DailyBar, ...],
+    fills: list[dict[str, Any]],
+    trading_date: date,
+) -> dict[str, dict[str, Any]]:
+    prior = pending.get("position_state", {}) if isinstance(pending, dict) else {}
+    prior = prior if isinstance(prior, dict) else {}
+    bought = {
+        str(item["instrument_id"])
+        for item in fills
+        if item.get("side") in {Side.BUY, Side.BUY.value}
+    }
+    closes = {item.instrument_id: float(item.close) for item in current}
+    state: dict[str, dict[str, Any]] = {}
+    for holding in account.holdings:
+        previous = prior.get(holding.instrument_id)
+        previous = previous if isinstance(previous, dict) else {}
+        is_new = holding.instrument_id in bought or not previous
+        prior_days = int(previous.get("holding_days", 0)) if previous else 0
+        last_evaluated = str(previous.get("last_evaluated_date", ""))
+        holding_days = 1 if is_new else prior_days + (last_evaluated != trading_date.isoformat())
+        close = closes.get(holding.instrument_id, holding.last_price)
+        previous_peak = float(previous.get("peak_close", close)) if previous else close
+        state[holding.instrument_id] = {
+            "entry_date": (
+                trading_date.isoformat() if is_new else str(previous.get("entry_date"))
+            ),
+            "holding_days": holding_days,
+            "peak_close": round(max(previous_peak, close), 6),
+            "last_evaluated_date": trading_date.isoformat(),
+            "inferred_entry": (
+                bool(previous.get("inferred_entry", False))
+                if previous
+                else holding.instrument_id not in bought
+            ),
+        }
+    return state
+
+
+def _evaluate_exit_rules(
+    holdings: dict[str, HoldingSnapshot],
+    history: dict[str, list[DailyBar]],
+    mainline_ids: set[str],
+    selected: set[str],
+    position_state: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    signals: dict[str, dict[str, Any]] = {}
+    for instrument_id, holding in sorted(holdings.items()):
+        series = history.get(instrument_id, [])
+        state = position_state.get(instrument_id, {})
+        reasons: list[dict[str, Any]] = []
+        if series:
+            current = series[-1]
+            close = float(current.close)
+            pnl_return = close / holding.average_cost - 1 if holding.average_cost else 0.0
+            peak = float(state.get("peak_close", close))
+            peak_return = peak / holding.average_cost - 1 if holding.average_cost else 0.0
+            trailing_drawdown = close / peak - 1 if peak else 0.0
+            if pnl_return <= _STOP_LOSS:
+                _add_exit_reason(reasons, "STOP_LOSS", 10, pnl_return, _STOP_LOSS)
+            if pnl_return >= _TAKE_PROFIT:
+                _add_exit_reason(reasons, "TAKE_PROFIT", 30, pnl_return, _TAKE_PROFIT)
+            if peak_return >= _TRAIL_ACTIVATION and trailing_drawdown <= _TRAIL_DRAWDOWN:
+                _add_exit_reason(
+                    reasons,
+                    "TRAILING_STOP",
+                    20,
+                    trailing_drawdown,
+                    _TRAIL_DRAWDOWN,
+                )
+            _append_moving_average_exits(reasons, series)
+            if len(series) >= 2:
+                previous = series[-2]
+                gap = float(current.open / previous.close - 1)
+                daily_return = float(current.close / previous.close - 1)
+                if gap <= _GAP_DOWN:
+                    _add_exit_reason(reasons, "LARGE_GAP_DOWN", 12, gap, _GAP_DOWN)
+                prior_volumes = [float(item.volume) for item in series[-6:-1]]
+                average_volume = statistics.fmean(prior_volumes) if prior_volumes else 0.0
+                volume_ratio = float(current.volume) / average_volume if average_volume else 0.0
+                if daily_return <= _VOLUME_SELL_OFF and volume_ratio >= _VOLUME_SPIKE:
+                    reasons.append(
+                        {
+                            "rule_id": "HIGH_VOLUME_SELL_OFF",
+                            "priority": 11,
+                            "observed": {
+                                "daily_return": round(daily_return, 8),
+                                "volume_ratio": round(volume_ratio, 6),
+                            },
+                            "threshold": {
+                                "daily_return_lte": _VOLUME_SELL_OFF,
+                                "volume_ratio_gte": _VOLUME_SPIKE,
+                            },
+                        }
+                    )
+        if _paper_segment(instrument_id) not in mainline_ids:
+            reasons.append(
+                {
+                    "rule_id": "MAINLINE_EXIT",
+                    "priority": 50,
+                    "observed": _paper_segment(instrument_id),
+                    "threshold": "holding must remain in a confirmed mainline",
+                }
+            )
+        holding_days = int(state.get("holding_days", 1))
+        if holding_days >= _MAX_HOLDING_DAYS:
+            _add_exit_reason(
+                reasons,
+                "MAX_HOLDING_DAYS",
+                60,
+                float(holding_days),
+                float(_MAX_HOLDING_DAYS),
+            )
+        if instrument_id not in selected:
+            reasons.append(
+                {
+                    "rule_id": "CANDIDATE_ROTATION",
+                    "priority": 90,
+                    "observed": "not selected",
+                    "threshold": "remain in selected top candidates",
+                }
+            )
+        if not reasons:
+            continue
+        reasons.sort(key=lambda item: (int(item["priority"]), str(item["rule_id"])))
+        available = holding.available_quantity - holding.available_quantity % 100
+        signals[instrument_id] = {
+            "instrument_id": instrument_id,
+            "action": Side.SELL.value,
+            "status": "READY" if available >= 100 else "BLOCKED_T_PLUS_ONE",
+            "quantity": available,
+            "primary_rule": reasons[0]["rule_id"],
+            "reasons": reasons,
+        }
+    return signals
+
+
+def _append_moving_average_exits(
+    reasons: list[dict[str, Any]], series: list[DailyBar]
+) -> None:
+    for window, priority in ((5, 40), (10, 41)):
+        if len(series) < window + 1:
+            continue
+        current_close = float(series[-1].close)
+        previous_close = float(series[-2].close)
+        current_ma = statistics.fmean(float(item.close) for item in series[-window:])
+        previous_ma = statistics.fmean(float(item.close) for item in series[-window - 1 : -1])
+        if current_close < current_ma and previous_close >= previous_ma:
+            reasons.append(
+                {
+                    "rule_id": f"CROSS_BELOW_MA{window}",
+                    "priority": priority,
+                    "observed": {
+                        "close": round(current_close, 6),
+                        "moving_average": round(current_ma, 6),
+                    },
+                    "threshold": f"close crosses below MA{window}",
+                }
+            )
+
+
+def _add_exit_reason(
+    reasons: list[dict[str, Any]],
+    rule_id: str,
+    priority: int,
+    observed: float,
+    threshold: float,
+) -> None:
+    reasons.append(
+        {
+            "rule_id": rule_id,
+            "priority": priority,
+            "observed": round(observed, 8),
+            "threshold": threshold,
+        }
+    )
+
+
+def _paper_segment(instrument_id: str) -> str:
+    try:
+        _country, exchange, symbol = instrument_id.split(".", maxsplit=2)
+    except ValueError:
+        return "BOARD.UNKNOWN"
+    if exchange == "SH" and symbol.startswith(("688", "689")):
+        return "BOARD.STAR"
+    if exchange == "SZ" and symbol.startswith(("300", "301")):
+        return "BOARD.CHINEXT"
+    if exchange == "SH":
+        return "BOARD.SH_MAIN"
+    if exchange == "SZ":
+        return "BOARD.SZ_MAIN"
+    return f"BOARD.{exchange}"
 
 
 def _name_for(instrument_id: str, names: dict[str, str]) -> str:
@@ -268,6 +522,7 @@ def _named_draft(draft: dict[str, Any], names: dict[str, str]) -> dict[str, Any]
             for instrument_id in draft["candidate_ids"]
         ],
         "excluded_buy_candidates": _named_rows(draft["excluded_buy_candidates"], names),
+        "exit_signals": _named_rows(draft["exit_signals"], names),
         "batch": {
             **batch,
             "drafts": _named_rows(batch["drafts"], names),

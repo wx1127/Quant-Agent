@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from typing import cast
@@ -15,6 +16,7 @@ from quant_agent.portfolio.snapshots import AccountSnapshot
 from quant_agent.shadow.models import ShadowDayEvidence, ShadowRunMode
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
+CandidateExclusion = Callable[[DailyBar, list[DailyBar]], str | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,10 +28,16 @@ class HistoricalReplayResult:
 class HistoricalShadowEngine:
     """Replay one day using only records available by its virtual close-time clock."""
 
-    def __init__(self, *, minimum_daily_instruments: int = 1000) -> None:
+    def __init__(
+        self,
+        *,
+        minimum_daily_instruments: int = 1000,
+        candidate_exclusion: CandidateExclusion | None = None,
+    ) -> None:
         if minimum_daily_instruments < 1:
             raise ValueError("minimum daily instruments must be positive")
         self._minimum_daily_instruments = minimum_daily_instruments
+        self._candidate_exclusion = candidate_exclusion
 
     def run_day(self, trading_date: date, bars: tuple[DailyBar, ...]) -> HistoricalReplayResult:
         observed_at = datetime.combine(trading_date, time(16, 5), tzinfo=_SHANGHAI)
@@ -54,7 +62,12 @@ class HistoricalShadowEngine:
             history.setdefault(item.instrument_id, []).append(item)
         regime, regime_details = _market_regime(current, history)
         mainlines, segment_details = _mainlines(current, history)
-        candidates, candidate_details = _candidates(current, history, set(mainlines))
+        candidates, candidate_details, candidate_exclusions = _candidates(
+            current,
+            history,
+            set(mainlines),
+            self._candidate_exclusion,
+        )
 
         input_hash = _bars_hash(eligible)
         account = AccountSnapshot(
@@ -113,6 +126,7 @@ class HistoricalShadowEngine:
                 "regime": regime_details,
                 "mainlines": segment_details,
                 "candidates": candidate_details,
+                "candidate_exclusions": candidate_exclusions,
                 "limitations": [
                     (
                         "historical replay does not validate real-time provider latency "
@@ -228,12 +242,18 @@ def _candidates(
     current: tuple[DailyBar, ...],
     history: dict[str, list[DailyBar]],
     mainlines: set[str],
-) -> tuple[tuple[str, ...], list[dict[str, object]]]:
+    exclusion: CandidateExclusion | None = None,
+) -> tuple[tuple[str, ...], list[dict[str, object]], list[dict[str, object]]]:
     rows: list[dict[str, object]] = []
+    excluded: list[dict[str, object]] = []
     max_turnover = max((float(item.turnover) for item in current), default=1.0)
     for item in current:
         series = history[item.instrument_id]
         if _segment(item.instrument_id) not in mainlines or len(series) < 21:
+            continue
+        reason = exclusion(item, series) if exclusion is not None else None
+        if reason is not None:
+            excluded.append({"instrument_id": item.instrument_id, "reason": reason})
             continue
         return_5d = float(series[-1].close / series[-6].close - 1)
         return_20d = float(series[-1].close / series[-21].close - 1)
@@ -254,4 +274,9 @@ def _candidates(
         reverse=True,
     )
     selected_rows = rows[:10]
-    return tuple(str(item["instrument_id"]) for item in selected_rows), selected_rows
+    excluded.sort(key=lambda item: str(item["instrument_id"]))
+    return (
+        tuple(str(item["instrument_id"]) for item in selected_rows),
+        selected_rows,
+        excluded,
+    )

@@ -63,10 +63,40 @@ P8 PAPER buy drafts must exclude:
   - STAR Market: `CN.SH.688*` and `CN.SH.689*`.
   - Beijing Stock Exchange: `CN.BJ.*`.
 - Hong Kong stocks: instruments whose exchange segment is `HK`.
+- Stocks whose actual close-to-close daily return has an absolute value above 10%.
 
-These are hard buy filters. If the strongest candidates are all excluded, the
-next-day buy draft may be empty. Existing PAPER holdings are not rewritten or
-backfilled; the rule applies to newly generated buy drafts.
+These filters run before candidate scoring, sorting, and Top-10 truncation. An
+excluded stock therefore has no candidate score or rank. Exclusions are retained
+separately in `market.candidate_exclusions` and the next-day draft audit section.
+If the strongest eligible set is empty, the next-day buy draft may be empty.
+Existing PAPER evidence is not rewritten or backfilled.
+
+## Exit Rule Layer
+
+Exit decisions use only data available at the current close and create sell drafts
+for the next trading day. The rule version is `p8-paper-exit-rules-v1`.
+
+The first version uses these deterministic thresholds:
+
+- Single-stock stop loss: close return from average cost is at or below -8%.
+- Fixed take profit: close return from average cost is at or above +20%.
+- Trailing stop: peak return reached +10% and close has fallen at least 8% from the peak.
+- Moving-average exit: close crosses from above to below MA5 or MA10.
+- Mainline exit: the holding's segment is no longer in the confirmed mainline set.
+- Large gap-down control: current open is at least 5% below the previous close.
+- High-volume sell-off: daily return is at or below -7% while volume is at least
+  1.5 times the preceding five-session average.
+- Maximum holding period: 20 evaluated trading days.
+- Candidate rotation: the holding is no longer in the selected eligible candidate set.
+
+Risk exits have priority over candidate rotation. Every signal records all matched
+reasons and the highest-priority primary rule. A stock bought that morning remains
+frozen under T+1: the exit signal is retained as `BLOCKED_T_PLUS_ONE`, and no
+unexecutable sell draft is created. The signal is evaluated again on the next close.
+
+Position state stores entry date, evaluated trading-day count, peak close, and last
+evaluation date in the pending draft. State inferred for a legacy holding is marked
+explicitly and is never presented as an observed historical entry date.
 
 ## Acceptance
 
@@ -74,6 +104,8 @@ backfilled; the rule applies to newly generated buy drafts.
 - Fills, holdings, candidates, and drafts include stock names.
 - Stocks with daily price limits above 10% and Hong Kong candidates are listed in
   `excluded_buy_candidates` and do not enter buy drafts.
+- Stocks with an absolute daily return above 10% are removed before scoring and ranking.
+- Exit evidence covers all configured rules, their priorities, and T+1 blocking.
 - Same-day close data is not used to create same-day fills.
 - Pending drafts with display-only `name` fields can still be read and executed.
 - Tests, lint, and type checks pass.
