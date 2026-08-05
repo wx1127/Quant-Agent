@@ -95,6 +95,7 @@ def test_daily_paper_uses_close_signal_only_on_next_day() -> None:
         account=account,
         pending=None,
         instrument_names={"CN.SH.600001": "强势股份", "CN.SZ.000001": "稳健银行"},
+        instrument_industries={"CN.SH.600001": "软件服务", "CN.SZ.000001": "银行"},
     )
 
     assert first["mode"] == "PAPER"
@@ -102,6 +103,10 @@ def test_daily_paper_uses_close_signal_only_on_next_day() -> None:
     assert first["next_day_order_draft"]["execute_on"] == "2026-07-26"
     assert first["next_day_order_draft"]["batch"]["drafts"]
     assert first["next_day_order_draft"]["batch"]["drafts"][0]["name"] == "强势股份"
+    assert {item["segment"] for item in first["market"]["mainlines"][:2]} == {
+        "软件服务",
+        "银行",
+    }
 
     second_day = first_day + timedelta(days=1)
     second = engine.run(
@@ -114,6 +119,7 @@ def test_daily_paper_uses_close_signal_only_on_next_day() -> None:
         ),
         pending=first["next_day_order_draft"],
         instrument_names={"CN.SH.600001": "强势股份", "CN.SZ.000001": "稳健银行"},
+        instrument_industries={"CN.SH.600001": "软件服务", "CN.SZ.000001": "银行"},
     )
 
     assert second["execution"]["signal_date"] == "2026-07-25"

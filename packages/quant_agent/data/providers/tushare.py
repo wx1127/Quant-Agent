@@ -180,6 +180,7 @@ class TushareHttpProvider:
                     instrument_type=InstrumentType.STOCK,
                     name=str(row["name"]),
                     listed_on=datetime.strptime(str(row["list_date"]), "%Y%m%d").date(),
+                    industry=str(row.get("industry") or "").strip() or None,
                     delisted_on=(
                         datetime.strptime(delist_date, "%Y%m%d").date() if delist_date else None
                     ),

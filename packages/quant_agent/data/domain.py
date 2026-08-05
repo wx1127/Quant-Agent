@@ -36,6 +36,7 @@ class Instrument(BaseModel):
     instrument_type: InstrumentType
     name: str
     listed_on: date
+    industry: str | None = None
     delisted_on: date | None = None
     status: InstrumentStatus = InstrumentStatus.LISTED
     source: str

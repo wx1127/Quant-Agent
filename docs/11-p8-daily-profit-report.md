@@ -71,6 +71,10 @@ separately in `market.candidate_exclusions` and the next-day draft audit section
 If the strongest eligible set is empty, the next-day buy draft may be empty.
 Existing PAPER evidence is not rewritten or backfilled.
 
+P8 mainlines use the industry field frozen with the current Tushare instrument
+snapshot. Exchange boards are not valid mainlines. A missing industry snapshot is
+a failed PAPER day and must not silently fall back to exchange-board segments.
+
 ## Exit Rule Layer
 
 Exit decisions use only data available at the current close and create sell drafts
@@ -82,7 +86,7 @@ The first version uses these deterministic thresholds:
 - Fixed take profit: close return from average cost is at or above +20%.
 - Trailing stop: peak return reached +10% and close has fallen at least 8% from the peak.
 - Moving-average exit: close crosses from above to below MA5 or MA10.
-- Mainline exit: the holding's segment is no longer in the confirmed mainline set.
+- Mainline exit: the holding's industry is no longer in the confirmed mainline set.
 - Large gap-down control: current open is at least 5% below the previous close.
 - High-volume sell-off: daily return is at or below -7% while volume is at least
   1.5 times the preceding five-session average.

@@ -152,6 +152,7 @@ def test_tushare_maps_instruments_and_trading_calendar() -> None:
 
     assert instruments.records[0].instrument_id == "CN.SZ.000001"
     assert instruments.records[0].listed_on == date(1991, 4, 3)
+    assert instruments.records[0].industry == "银行"
     assert profiles.records[0].name == "平安银行"
     assert profiles.records[0].industry == "银行"
     assert calendar.records[0].is_open is True

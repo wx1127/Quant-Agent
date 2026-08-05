@@ -17,6 +17,7 @@ from quant_agent.shadow.models import ShadowDayEvidence, ShadowRunMode
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 CandidateExclusion = Callable[[DailyBar, list[DailyBar]], str | None]
+SegmentResolver = Callable[[str], str | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,11 +34,13 @@ class HistoricalShadowEngine:
         *,
         minimum_daily_instruments: int = 1000,
         candidate_exclusion: CandidateExclusion | None = None,
+        segment_resolver: SegmentResolver | None = None,
     ) -> None:
         if minimum_daily_instruments < 1:
             raise ValueError("minimum daily instruments must be positive")
         self._minimum_daily_instruments = minimum_daily_instruments
         self._candidate_exclusion = candidate_exclusion
+        self._segment_resolver = segment_resolver
 
     def run_day(self, trading_date: date, bars: tuple[DailyBar, ...]) -> HistoricalReplayResult:
         observed_at = datetime.combine(trading_date, time(16, 5), tzinfo=_SHANGHAI)
@@ -61,12 +64,13 @@ class HistoricalShadowEngine:
         for item in eligible:
             history.setdefault(item.instrument_id, []).append(item)
         regime, regime_details = _market_regime(current, history)
-        mainlines, segment_details = _mainlines(current, history)
+        mainlines, segment_details = _mainlines(current, history, self._segment_resolver)
         candidates, candidate_details, candidate_exclusions = _candidates(
             current,
             history,
             set(mainlines),
             self._candidate_exclusion,
+            self._segment_resolver,
         )
 
         input_hash = _bars_hash(eligible)
@@ -87,6 +91,11 @@ class HistoricalShadowEngine:
         )
         excluded_future_rows = len(bars) - len(eligible)
         data_version = f"tushare-pit-{trading_date}-{input_hash[:12]}"
+        segment_note = (
+            "mainlines use point-in-time supplied industries"
+            if self._segment_resolver is not None
+            else "mainlines are stable exchange-board segments"
+        )
         evidence = ShadowDayEvidence(
             trading_date=trading_date,
             observed_at=observed_at,
@@ -106,7 +115,7 @@ class HistoricalShadowEngine:
             manual_intervention_minutes=0,
             notes=(
                 "historical point-in-time replay; virtual clock 16:05 Asia/Shanghai; "
-                "unadjusted daily bars only; mainlines are stable exchange-board segments; "
+                f"unadjusted daily bars only; {segment_note}; "
                 f"future rows excluded by query={excluded_future_rows}"
             ),
             run_mode=ShadowRunMode.HISTORICAL_POINT_IN_TIME,
@@ -206,12 +215,18 @@ def _five_day_return(series: list[DailyBar]) -> float | None:
 def _mainlines(
     current: tuple[DailyBar, ...],
     history: dict[str, list[DailyBar]],
+    segment_resolver: SegmentResolver | None = None,
 ) -> tuple[tuple[str, ...], list[dict[str, object]]]:
     grouped: dict[str, list[tuple[float, float]]] = {}
     for item in current:
         return_5d = _five_day_return(history[item.instrument_id])
-        if return_5d is not None:
-            grouped.setdefault(_segment(item.instrument_id), []).append(
+        segment = (
+            segment_resolver(item.instrument_id)
+            if segment_resolver is not None
+            else _segment(item.instrument_id)
+        )
+        if return_5d is not None and segment is not None:
+            grouped.setdefault(segment, []).append(
                 (return_5d, float(item.turnover))
             )
     rows: list[dict[str, object]] = []
@@ -243,13 +258,19 @@ def _candidates(
     history: dict[str, list[DailyBar]],
     mainlines: set[str],
     exclusion: CandidateExclusion | None = None,
+    segment_resolver: SegmentResolver | None = None,
 ) -> tuple[tuple[str, ...], list[dict[str, object]], list[dict[str, object]]]:
     rows: list[dict[str, object]] = []
     excluded: list[dict[str, object]] = []
     max_turnover = max((float(item.turnover) for item in current), default=1.0)
     for item in current:
         series = history[item.instrument_id]
-        if _segment(item.instrument_id) not in mainlines or len(series) < 21:
+        segment = (
+            segment_resolver(item.instrument_id)
+            if segment_resolver is not None
+            else _segment(item.instrument_id)
+        )
+        if segment not in mainlines or len(series) < 21:
             continue
         reason = exclusion(item, series) if exclusion is not None else None
         if reason is not None:
@@ -262,7 +283,7 @@ def _candidates(
         rows.append(
             {
                 "instrument_id": item.instrument_id,
-                "segment": _segment(item.instrument_id),
+                "segment": segment,
                 "return_5d": return_5d,
                 "return_20d": return_20d,
                 "turnover": float(item.turnover),

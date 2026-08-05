@@ -252,6 +252,13 @@ def main() -> int:
             for item in instruments
             if item.instrument_id and item.name
         }
+        instrument_industries = {
+            item.instrument_id: item.industry
+            for item in instruments
+            if item.instrument_id and item.industry
+        }
+        if not instrument_industries:
+            raise ValueError("instrument industry snapshot is required for PAPER mainlines")
         record = PaperDailyEngine().run(
             trading_date=trading_date,
             next_trading_date=following,
@@ -260,6 +267,7 @@ def main() -> int:
             account=_latest_account(output, observed_at),
             pending=_pending(output, trading_date),
             instrument_names=instrument_names,
+            instrument_industries=instrument_industries,
         )
         if prior_failure is not None:
             record["recovery"] = {

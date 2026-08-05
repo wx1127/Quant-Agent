@@ -46,6 +46,7 @@ class PaperDailyEngine:
         account: AccountSnapshot,
         pending: dict[str, Any] | None,
         instrument_names: dict[str, str] | None = None,
+        instrument_industries: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         current = tuple(item for item in bars if item.trade_date == trading_date)
         if not current:
@@ -55,9 +56,15 @@ class PaperDailyEngine:
         if any(item.available_at > observed_at for item in bars):
             raise ValueError("future market data cannot enter paper validation")
 
-        analysis = HistoricalShadowEngine(candidate_exclusion=_candidate_exclusion).run_day(
-            trading_date, bars
-        )
+        industries = instrument_industries or {}
+        analysis = HistoricalShadowEngine(
+            candidate_exclusion=_candidate_exclusion,
+            segment_resolver=(
+                lambda instrument_id: industries.get(instrument_id)
+            )
+            if instrument_industries is not None
+            else None,
+        ).run_day(trading_date, bars)
         names = instrument_names or {}
         beginning_account = _mark_account(account, current, observed_at)
         execution = self._execute_pending(pending, beginning_account, current, trading_date)
@@ -76,6 +83,7 @@ class PaperDailyEngine:
             current,
             bars,
             analysis.evidence.mainline_ids,
+            industries if instrument_industries is not None else None,
             position_state,
             trading_date,
             next_trading_date,
@@ -172,6 +180,7 @@ def _build_next_day_drafts(
     current: tuple[DailyBar, ...],
     bars: tuple[DailyBar, ...],
     mainline_ids: tuple[str, ...],
+    instrument_industries: dict[str, str] | None,
     position_state: dict[str, dict[str, Any]],
     signal_date: date,
     execute_on: date,
@@ -193,6 +202,7 @@ def _build_next_day_drafts(
         set(mainline_ids),
         set(selected),
         position_state,
+        instrument_industries,
     )
     created_at = datetime.combine(signal_date, time(16, 5), tzinfo=_SHANGHAI)
     drafts: list[OrderDraft] = []
@@ -339,6 +349,7 @@ def _evaluate_exit_rules(
     mainline_ids: set[str],
     selected: set[str],
     position_state: dict[str, dict[str, Any]],
+    instrument_industries: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     signals: dict[str, dict[str, Any]] = {}
     for instrument_id, holding in sorted(holdings.items()):
@@ -389,12 +400,17 @@ def _evaluate_exit_rules(
                             },
                         }
                     )
-        if _paper_segment(instrument_id) not in mainline_ids:
+        segment = (
+            instrument_industries.get(instrument_id)
+            if instrument_industries is not None
+            else _paper_segment(instrument_id)
+        )
+        if segment not in mainline_ids:
             reasons.append(
                 {
                     "rule_id": "MAINLINE_EXIT",
                     "priority": 50,
-                    "observed": _paper_segment(instrument_id),
+                    "observed": segment or "UNCLASSIFIED",
                     "threshold": "holding must remain in a confirmed mainline",
                 }
             )
