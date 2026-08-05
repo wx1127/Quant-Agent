@@ -1,5 +1,21 @@
 # 量化 Agent 项目进度文档
 
+## P8-T08-E01：每日收盘收益报告与次日草稿名称化
+
+- **状态**：已完成
+- **日期**：2026-08-05
+- **范围/归属**：P8 模拟盘日终执行器、收盘盯市估值、日报结构、股票名称快照与单元测试。
+- **交付物**：
+  - 每日 `reports/<trading_date>.json` 新增 `close_report`、`filled_orders` 和 `next_day_order_draft`。
+  - 成交、持仓、候选和次日草稿新增股票 `name`，同时保留 `instrument_id` 作为审计键。
+  - 日终执行器缓存 Tushare 股票名称快照到 `snapshots/instruments-<trading_date>.json`。
+  - 模拟成交后再次按当日收盘价盯市，日报收益反映收盘浮盈浮亏。
+  - 新增 `docs/11-p8-daily-profit-report.md`。
+- **验收证据**：
+  - `pytest -q`：172 passed，覆盖率 90.92%。
+  - `ruff check packages/quant_agent/paper_validation/daily.py scripts/paper/run_daily.py tests/unit/test_paper_validation_daily.py`：通过。
+  - `mypy packages/quant_agent/paper_validation/daily.py scripts/paper/run_daily.py`：通过。
+
 > 文档状态：执行版 v0.1  
 > 初始日期：2026-07-30  
 > 当前阶段：P8-T07 历史时点影子运行已完成；P8-T08 模拟盘运行中

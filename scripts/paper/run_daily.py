@@ -12,7 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from quant_agent.core.time import shanghai_now
-from quant_agent.data.domain import DailyBar
+from quant_agent.data.domain import DailyBar, Instrument
 from quant_agent.data.providers.tushare import TushareHttpProvider
 from quant_agent.paper_validation.daily import PaperDailyEngine
 from quant_agent.portfolio.snapshots import AccountSnapshot
@@ -48,6 +48,17 @@ def _read_cached(path: Path) -> tuple[DailyBar, ...]:
     return tuple(DailyBar.model_validate(item) for item in records)
 
 
+def _read_cached_instruments(path: Path) -> tuple[Instrument, ...]:
+    payload: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    records = payload["records"]
+    records_hash = _canonical_hash(records)
+    without_hash = {key: value for key, value in payload.items() if key != "snapshot_hash"}
+    payload_hash = _canonical_hash(without_hash)
+    if payload.get("snapshot_hash") not in {records_hash, payload_hash}:
+        raise ValueError(f"instrument snapshot hash mismatch: {path}")
+    return tuple(Instrument.model_validate(item) for item in records)
+
+
 def _load_or_fetch(
     provider: TushareHttpProvider,
     trading_date: date,
@@ -62,6 +73,40 @@ def _load_or_fetch(
     batch = provider.fetch_daily_bars(trading_date)
     if not batch.records:
         raise ValueError(f"provider returned no bars for {trading_date}")
+    records = [item.model_dump(mode="json") for item in batch.records]
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(
+            {
+                "provider": batch.provider,
+                "trading_date": trading_date.isoformat(),
+                "available_at": batch.available_at.isoformat(),
+                "records": records,
+                "snapshot_hash": _canonical_hash(records),
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return batch.records
+
+
+def _load_or_fetch_instruments(
+    provider: TushareHttpProvider,
+    trading_date: date,
+    output: Path,
+    caches: list[Path],
+) -> tuple[Instrument, ...]:
+    destination = output / "snapshots" / f"instruments-{trading_date}.json"
+    candidates = [destination, *(path / destination.name for path in caches)]
+    source = next((path for path in candidates if path.exists()), None)
+    if source is not None:
+        return _read_cached_instruments(source)
+    batch = provider.fetch_instruments(trading_date)
+    if not batch.records:
+        raise ValueError(f"provider returned no instruments for {trading_date}")
     records = [item.model_dump(mode="json") for item in batch.records]
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
@@ -172,6 +217,7 @@ def main() -> int:
         raise SystemExit("market close data is not available yet")
     try:
         with TushareHttpProvider(_token()) as provider:
+            cache_roots = [Path(item) for item in arguments.source_cache]
             calendar = provider.fetch_trading_calendar(
                 arguments.market,
                 trading_date - timedelta(days=60),
@@ -185,6 +231,12 @@ def main() -> int:
             following = next(item for item in days if item > trading_date)
             if len(prior) < 25:
                 raise ValueError("trading calendar does not cover 25 history days")
+            instruments = _load_or_fetch_instruments(
+                provider,
+                trading_date,
+                output,
+                cache_roots,
+            )
             bars = tuple(
                 bar
                 for day in prior
@@ -192,9 +244,14 @@ def main() -> int:
                     provider,
                     day,
                     output,
-                    [Path(item) for item in arguments.source_cache],
+                    cache_roots,
                 )
             )
+        instrument_names = {
+            item.instrument_id: item.name
+            for item in instruments
+            if item.instrument_id and item.name
+        }
         record = PaperDailyEngine().run(
             trading_date=trading_date,
             next_trading_date=following,
@@ -202,6 +259,7 @@ def main() -> int:
             bars=bars,
             account=_latest_account(output, observed_at),
             pending=_pending(output, trading_date),
+            instrument_names=instrument_names,
         )
         if prior_failure is not None:
             record["recovery"] = {
@@ -224,10 +282,13 @@ def main() -> int:
                 "trading_date": record["trading_date"],
                 "pipeline_succeeded": True,
                 "reconciliation": record["reconciliation"],
+                "close_report": record["close_report"],
                 "orders": len(record["execution"]["orders"]),
                 "fills": len(record["execution"]["fills"]),
+                "filled_orders": record["execution"]["fills"],
                 "fees": record["execution"]["fees"],
                 "slippage": record["execution"]["slippage"],
+                "next_day_order_draft": record["next_day_order_draft"],
                 "alerts": record["alerts"],
                 "manual_interventions": record["manual_interventions"],
                 "recovery": record.get("recovery"),

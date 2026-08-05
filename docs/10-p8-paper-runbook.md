@@ -1,5 +1,13 @@
 # P8-T08 模拟盘日终运行手册
 
+## 0. 收盘收益报告要求
+
+- 每个成功的 PAPER 交易日必须在 `reports/<trading_date>.json` 写入 `close_report`。
+- `close_report` 必须使用当日收盘价盯市，包含期初权益、期末权益、当日收益、当日收益率、现金、持仓市值和逐只股票浮盈浮亏。
+- 日报必须同时写入当日模拟成交 `filled_orders` 和下一交易日草稿 `next_day_order_draft`。
+- 面向用户展示的成交、持仓、候选和草稿必须包含股票 `name`；`instrument_id` 仅作为审计和排错字段保留。
+- 股票名称来自当天 `snapshots/instruments-<trading_date>.json`，缺失名称时允许回退到 `instrument_id`，但不得阻断 PAPER 验证。
+
 ## 1. 运行边界
 
 - 模式固定为 `PAPER`，执行器固定为无凭证、无券商端点的 `PaperBroker`；

@@ -33,6 +33,7 @@ class PaperDailyEngine:
         bars: tuple[DailyBar, ...],
         account: AccountSnapshot,
         pending: dict[str, Any] | None,
+        instrument_names: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         current = tuple(item for item in bars if item.trade_date == trading_date)
         if not current:
@@ -43,9 +44,10 @@ class PaperDailyEngine:
             raise ValueError("future market data cannot enter paper validation")
 
         analysis = HistoricalShadowEngine().run_day(trading_date, bars)
-        marked_account = _mark_account(account, current, observed_at)
-        execution = self._execute_pending(pending, marked_account, current, trading_date)
-        account_after = execution["account"]
+        names = instrument_names or {}
+        beginning_account = _mark_account(account, current, observed_at)
+        execution = self._execute_pending(pending, beginning_account, current, trading_date)
+        account_after = _mark_account(execution["account"], current, observed_at)
         drafts = _build_next_day_drafts(
             analysis.details["candidates"],
             account_after,
@@ -54,6 +56,7 @@ class PaperDailyEngine:
             next_trading_date,
         )
         reconciliation = _reconcile(account_after)
+        close_report = _close_report(beginning_account, account_after, current, names)
         return {
             "schema_version": "p8-paper-day-v1",
             "mode": "PAPER",
@@ -66,12 +69,16 @@ class PaperDailyEngine:
                 "instrument_count": len(current),
                 "regime": analysis.details["regime"],
                 "mainlines": analysis.details["mainlines"],
-                "candidates": analysis.details["candidates"],
+                "candidates": _named_rows(analysis.details["candidates"], names),
             },
-            "execution": {key: value for key, value in execution.items() if key != "account"},
-            "next_day_order_draft": drafts,
-            "account": json.loads(account_after.to_json()),
+            "execution": _named_execution(
+                {key: value for key, value in execution.items() if key != "account"},
+                names,
+            ),
+            "next_day_order_draft": _named_draft(drafts, names),
+            "account": _named_account(account_after, names),
             "reconciliation": reconciliation,
+            "close_report": close_report,
             "alerts": [],
             "manual_interventions": [],
             "pipeline_succeeded": True,
@@ -192,6 +199,54 @@ def _build_next_day_drafts(
     }
 
 
+def _name_for(instrument_id: str, names: dict[str, str]) -> str:
+    return names.get(instrument_id, instrument_id)
+
+
+def _named_rows(rows: object, names: dict[str, str]) -> object:
+    if not isinstance(rows, list):
+        return rows
+    return [
+        {
+            **item,
+            "name": _name_for(str(item["instrument_id"]), names),
+        }
+        if isinstance(item, dict) and "instrument_id" in item
+        else item
+        for item in rows
+    ]
+
+
+def _named_execution(execution: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
+    return {
+        **execution,
+        "fills": _named_rows(execution["fills"], names),
+    }
+
+
+def _named_draft(draft: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
+    batch = draft["batch"]
+    return {
+        **draft,
+        "candidates": [
+            {"instrument_id": instrument_id, "name": _name_for(instrument_id, names)}
+            for instrument_id in draft["candidate_ids"]
+        ],
+        "batch": {
+            **batch,
+            "drafts": _named_rows(batch["drafts"], names),
+        },
+    }
+
+
+def _named_account(account: AccountSnapshot, names: dict[str, str]) -> dict[str, Any]:
+    payload = json.loads(account.to_json())
+    if not isinstance(payload, dict):
+        raise ValueError("account payload must be an object")
+    payload["holdings"] = _named_rows(payload["holdings"], names)
+    return payload
+
+
 def _draft(
     account: AccountSnapshot,
     instrument_id: str,
@@ -291,6 +346,47 @@ def _mark_account(
     )
 
 
+def _close_report(
+    beginning: AccountSnapshot,
+    ending: AccountSnapshot,
+    current: tuple[DailyBar, ...],
+    names: dict[str, str],
+) -> dict[str, Any]:
+    close_prices = {item.instrument_id: float(item.close) for item in current}
+    beginning_equity = beginning.total_equity
+    ending_equity = ending.total_equity
+    daily_pnl = ending_equity - beginning_equity
+    holdings = []
+    for item in sorted(ending.holdings, key=lambda holding: names.get(holding.instrument_id, "")):
+        close_price = close_prices.get(item.instrument_id, item.last_price)
+        market_value = item.quantity * close_price
+        pnl = market_value - item.quantity * item.average_cost
+        holdings.append(
+            {
+                "instrument_id": item.instrument_id,
+                "name": _name_for(item.instrument_id, names),
+                "quantity": item.quantity,
+                "average_cost": round(item.average_cost, 6),
+                "close": round(close_price, 6),
+                "market_value": round(market_value, 6),
+                "unrealized_pnl": round(pnl, 6),
+                "unrealized_return": round(pnl / (item.quantity * item.average_cost), 8)
+                if item.quantity and item.average_cost
+                else 0.0,
+            }
+        )
+    return {
+        "valuation_time": "close",
+        "beginning_equity": round(beginning_equity, 6),
+        "ending_equity": round(ending_equity, 6),
+        "daily_pnl": round(daily_pnl, 6),
+        "daily_return": round(daily_pnl / beginning_equity, 8) if beginning_equity else 0.0,
+        "cash": round(ending.total_cash, 6),
+        "holdings_value": round(ending.total_market_value, 6),
+        "holdings": holdings,
+    }
+
+
 def _reconcile(account: AccountSnapshot) -> dict[str, Any]:
     holdings_value = sum(item.quantity * item.last_price for item in account.holdings)
     calculated = account.available_cash + account.frozen_cash + holdings_value
@@ -324,10 +420,11 @@ def _batch_to_mapping(batch: OrderDraftBatch) -> dict[str, Any]:
 
 
 def _batch_from_mapping(payload: dict[str, Any]) -> OrderDraftBatch:
+    display_keys = {"name"}
     drafts = tuple(
         OrderDraft(
             **{
-                **item,
+                **{key: value for key, value in item.items() if key not in display_keys},
                 "asset_type": AssetType(item["asset_type"]),
                 "side": Side(item["side"]),
                 "created_at": (
