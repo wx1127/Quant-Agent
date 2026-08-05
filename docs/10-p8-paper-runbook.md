@@ -7,6 +7,9 @@
 - 日报必须同时写入当日模拟成交 `filled_orders` 和下一交易日草稿 `next_day_order_draft`。
 - 面向用户展示的成交、持仓、候选和草稿必须包含股票 `name`；`instrument_id` 仅作为审计和排错字段保留。
 - 股票名称来自当天 `snapshots/instruments-<trading_date>.json`，缺失名称时允许回退到 `instrument_id`，但不得阻断 PAPER 验证。
+- 次日买入草稿必须排除创业板 `CN.SZ.300*`、`CN.SZ.301*` 和交易所段为 `HK` 的港股；被排除候选写入
+  `next_day_order_draft.excluded_buy_candidates`。
+- 买入排除规则不回写历史模拟成交。规则生效前已形成的 append-only 证据必须保留原状。
 
 ## 1. 运行边界
 

@@ -19,6 +19,7 @@ from quant_agent.shadow.historical import HistoricalShadowEngine
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _FEE = FeeSchedule("paper-fee-v1", date(2023, 8, 28), 0.0003, 5.0, 0.0005, 5.0)
+_EXCLUDED_BUY_RULE_VERSION = "p8-paper-buy-exclusions-v1"
 
 
 class PaperDailyEngine:
@@ -145,7 +146,23 @@ def _build_next_day_drafts(
     execute_on: date,
 ) -> dict[str, Any]:
     candidates = list(candidate_rows) if isinstance(candidate_rows, list) else []
-    selected = [str(item["instrument_id"]) for item in candidates[:5]]
+    excluded = [
+        {
+            "instrument_id": str(item["instrument_id"]),
+            "reason": _buy_exclusion_reason(str(item["instrument_id"])),
+        }
+        for item in candidates
+        if isinstance(item, dict)
+        and "instrument_id" in item
+        and _buy_exclusion_reason(str(item["instrument_id"])) is not None
+    ]
+    selected = [
+        str(item["instrument_id"])
+        for item in candidates
+        if isinstance(item, dict)
+        and "instrument_id" in item
+        and _buy_exclusion_reason(str(item["instrument_id"])) is None
+    ][:5]
     prices = {item.instrument_id: float(item.close) for item in current}
     holdings = {item.instrument_id: item for item in account.holdings}
     created_at = datetime.combine(signal_date, time(16, 5), tzinfo=_SHANGHAI)
@@ -195,8 +212,22 @@ def _build_next_day_drafts(
         "signal_date": signal_date.isoformat(),
         "execute_on": execute_on.isoformat(),
         "candidate_ids": selected,
+        "excluded_buy_candidates": excluded,
+        "buy_exclusion_rule_version": _EXCLUDED_BUY_RULE_VERSION,
         "batch": _batch_to_mapping(batch),
     }
+
+
+def _buy_exclusion_reason(instrument_id: str) -> str | None:
+    try:
+        country, exchange, symbol = instrument_id.split(".", maxsplit=2)
+    except ValueError:
+        return "invalid instrument identifier"
+    if exchange == "HK":
+        return "hong kong stock is excluded from PAPER buys"
+    if country == "CN" and exchange == "SZ" and symbol.startswith(("300", "301")):
+        return "ChiNext stock is excluded from PAPER buys"
+    return None
 
 
 def _name_for(instrument_id: str, names: dict[str, str]) -> str:
@@ -232,6 +263,7 @@ def _named_draft(draft: dict[str, Any], names: dict[str, str]) -> dict[str, Any]
             {"instrument_id": instrument_id, "name": _name_for(instrument_id, names)}
             for instrument_id in draft["candidate_ids"]
         ],
+        "excluded_buy_candidates": _named_rows(draft["excluded_buy_candidates"], names),
         "batch": {
             **batch,
             "drafts": _named_rows(batch["drafts"], names),

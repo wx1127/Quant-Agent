@@ -16,6 +16,21 @@
   - `ruff check packages/quant_agent/paper_validation/daily.py scripts/paper/run_daily.py tests/unit/test_paper_validation_daily.py`：通过。
   - `mypy packages/quant_agent/paper_validation/daily.py scripts/paper/run_daily.py`：通过。
 
+## P8-T08-E02：创业板与港股买入排除规则
+
+- **状态**：已完成
+- **日期**：2026-08-05
+- **范围/归属**：P8 模拟盘次日买入草稿生成与日报排除证据。
+- **交付物**：
+  - 买入草稿硬过滤 `CN.SZ.300*`、`CN.SZ.301*` 创业板股票。
+  - 买入草稿硬过滤交易所段为 `HK` 的港股。
+  - 被过滤候选写入 `next_day_order_draft.excluded_buy_candidates`，包含股票名称和排除原因。
+  - 若最强候选全部被过滤，允许次日买入草稿为空，不强行补买。
+- **验收证据**：
+  - `pytest tests/unit/test_paper_validation_daily.py -q --no-cov`：2 passed。
+  - `ruff check packages/quant_agent/paper_validation/daily.py tests/unit/test_paper_validation_daily.py`：通过。
+  - `mypy packages/quant_agent/paper_validation/daily.py`：通过。
+
 > 文档状态：执行版 v0.1  
 > 初始日期：2026-07-30  
 > 当前阶段：P8-T07 历史时点影子运行已完成；P8-T08 模拟盘运行中

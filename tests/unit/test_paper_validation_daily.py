@@ -33,6 +33,36 @@ def _bars(start: date, count: int) -> tuple[DailyBar, ...]:
     return tuple(rows)
 
 
+def _bars_with_excluded_buys(start: date, count: int) -> tuple[DailyBar, ...]:
+    rows = []
+    definitions = (
+        ("CN.SZ.300001", 0.05),
+        ("CN.HK.00700", 0.045),
+        ("CN.SH.600001", 0.03),
+        ("CN.SZ.000001", 0.025),
+    )
+    for index in range(count):
+        day = start + timedelta(days=index)
+        for number, growth in definitions:
+            close = Decimal("10") * Decimal(str((1 + growth) ** index))
+            rows.append(
+                DailyBar(
+                    instrument_id=number,
+                    trade_date=day,
+                    open=close,
+                    high=close * Decimal("1.01"),
+                    low=close * Decimal("0.99"),
+                    close=close,
+                    volume=Decimal("1000000"),
+                    turnover=close * Decimal("1000000"),
+                    source="fixture",
+                    available_at=datetime(day.year, day.month, day.day, 16, tzinfo=TZ),
+                    version=day.isoformat(),
+                )
+            )
+    return tuple(rows)
+
+
 def test_daily_paper_uses_close_signal_only_on_next_day() -> None:
     start = date(2026, 7, 1)
     all_bars = _bars(start, 26)
@@ -88,3 +118,45 @@ def test_daily_paper_uses_close_signal_only_on_next_day() -> None:
     assert second["close_report"]["holdings"][0]["name"] == "强势股份"
     assert second["close_report"]["daily_pnl"] != -second["execution"]["fees"]
     assert second["live_connection_attempted"] is False
+
+
+def test_daily_paper_excludes_chinext_and_hong_kong_buys() -> None:
+    start = date(2026, 7, 1)
+    trading_day = start + timedelta(days=24)
+    bars = _bars_with_excluded_buys(start, 25)
+    account = AccountSnapshot(
+        "initial",
+        "p8-paper-1",
+        datetime(2026, 7, 24, 16, 30, tzinfo=TZ),
+        1_000_000,
+        0,
+        (),
+        "paper",
+        "v1",
+    )
+
+    record = PaperDailyEngine().run(
+        trading_date=trading_day,
+        next_trading_date=trading_day + timedelta(days=1),
+        observed_at=datetime(2026, 7, 25, 16, 30, tzinfo=TZ),
+        bars=bars,
+        account=account,
+        pending=None,
+        instrument_names={
+            "CN.SZ.300001": "创业样本",
+            "CN.HK.00700": "港股样本",
+            "CN.SH.600001": "主板甲",
+            "CN.SZ.000001": "主板乙",
+        },
+    )
+
+    draft = record["next_day_order_draft"]
+    assert "CN.SZ.300001" not in draft["candidate_ids"]
+    assert "CN.HK.00700" not in draft["candidate_ids"]
+    assert all(
+        item["instrument_id"] not in {"CN.SZ.300001", "CN.HK.00700"}
+        for item in draft["batch"]["drafts"]
+    )
+    excluded = {item["name"]: item["reason"] for item in draft["excluded_buy_candidates"]}
+    assert excluded["创业样本"] == "ChiNext stock is excluded from PAPER buys"
+    assert excluded["港股样本"] == "hong kong stock is excluded from PAPER buys"

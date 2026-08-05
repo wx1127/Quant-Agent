@@ -25,6 +25,8 @@ The report must include:
 - `reconciliation`: account reconciliation after close marking.
 - `fees` and `slippage`: simulated trading costs.
 - `alerts` and `manual_interventions`: daily operational evidence.
+- `next_day_order_draft.excluded_buy_candidates`: candidates blocked by buy
+  exclusion rules.
 
 Stock-facing sections must include `name` and keep `instrument_id` as an audit key.
 User-facing reports should display `name` first; `instrument_id` is retained for
@@ -52,10 +54,23 @@ This snapshot supplies stock names for fills, holdings, candidates, and next-day
 drafts. If a name is unavailable, the system falls back to `instrument_id` without
 blocking the PAPER run.
 
+## Buy Exclusion Rules
+
+P8 PAPER buy drafts must exclude:
+
+- ChiNext stocks: `CN.SZ.300*` and `CN.SZ.301*`.
+- Hong Kong stocks: instruments whose exchange segment is `HK`.
+
+These are hard buy filters. If the strongest candidates are all excluded, the
+next-day buy draft may be empty. Existing PAPER holdings are not rewritten or
+backfilled; the rule applies to newly generated buy drafts.
+
 ## Acceptance
 
 - Daily report includes close-marked PnL and next-day draft orders.
 - Fills, holdings, candidates, and drafts include stock names.
+- ChiNext and Hong Kong candidates are listed in `excluded_buy_candidates` and do
+  not enter buy drafts.
 - Same-day close data is not used to create same-day fills.
 - Pending drafts with display-only `name` fields can still be read and executed.
 - Tests, lint, and type checks pass.
