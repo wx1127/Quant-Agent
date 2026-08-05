@@ -155,6 +155,18 @@ def _pending(root: Path, trading_date: date) -> dict[str, Any] | None:
             matches.append(payload)
     if len(matches) > 1:
         raise ValueError("multiple pending batches target the same trading day")
+    override_path = root / "pending_overrides" / f"{trading_date}.json"
+    if override_path.exists():
+        override = json.loads(override_path.read_text(encoding="utf-8"))
+        if override.get("execute_on") != trading_date.isoformat():
+            raise ValueError("pending override execution date mismatch")
+        if override.get("mode") != "PAPER" or override.get("manual_override") is not True:
+            raise ValueError("pending override must be an explicitly authorized PAPER artifact")
+        superseded = override.get("superseded_signal_dates")
+        expected = sorted(str(item["signal_date"]) for item in matches)
+        if superseded != expected:
+            raise ValueError("pending override must enumerate every superseded signal date")
+        return override
     return matches[0] if matches else None
 
 
