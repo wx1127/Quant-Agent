@@ -23,6 +23,10 @@
 成功日文件和失败日文件都采用不可覆盖写入。同一日期已存在失败记录时，运行入口拒绝生成
 成功记录。
 
+人工明确要求当日恢复运行时，可以使用 `--retry-after-failure`。原失败文件必须保留，新增日记录
+必须标记 `RECOVERED_AFTER_FAILURE`，且不能计为“干净调度成功”；恢复再次失败时写入独立的
+`recovery_failures/`，不得覆盖首次失败。
+
 ## 3. 日终命令
 
 ```powershell
@@ -46,6 +50,8 @@ $env:MARKET_DATA_TOKEN_FILE = 'D:\DevelopTool\Quant-Agent\secrets\market_data_to
   `scripts/paper/run_scheduled.ps1`；
 - 调度进程从16:00开始，等待至16:05点时数据安全门禁后调用日终入口；
 - 任务设置为错过计划时间后尽快启动、禁止并发重复实例，并记录退出码及调度状态；
+- 任务允许使用电池时启动且不会因切换到电池供电而被终止；安装或修复统一运行
+  `scripts/paper/install_scheduler.ps1`，不得依赖手工参数；
 - Codex 自动任务不再承担执行，只在16:45巡检当天成功或失败证据；
 - 每次运行先核对前一交易日是否存在成功或失败证据；
 - 缺少两者时必须追加“调度缺失”失败记录并告警；

@@ -145,6 +145,7 @@ def main() -> int:
     parser.add_argument("--source-cache", action="append", default=[])
     parser.add_argument("--market", default="SSE")
     parser.add_argument("--record-missed", action="store_true")
+    parser.add_argument("--retry-after-failure", action="store_true")
     parser.add_argument("--reason")
     arguments = parser.parse_args()
     trading_date = date.fromisoformat(arguments.trading_date)
@@ -157,8 +158,11 @@ def main() -> int:
         return 2
     success_path = output / "days" / f"{trading_date}.json"
     failure_path = output / "failures" / f"{trading_date}.json"
-    if failure_path.exists():
+    prior_failure: dict[str, Any] | None = None
+    if failure_path.exists() and not arguments.retry_after_failure:
         raise SystemExit("day already has a final failure record; success backfill is forbidden")
+    if failure_path.exists():
+        prior_failure = json.loads(failure_path.read_text(encoding="utf-8"))
     if success_path.exists():
         print(success_path.read_text(encoding="utf-8"))
         return 0
@@ -199,6 +203,13 @@ def main() -> int:
             account=_latest_account(output, observed_at),
             pending=_pending(output, trading_date),
         )
+        if prior_failure is not None:
+            record["recovery"] = {
+                "status": "RECOVERED_AFTER_FAILURE",
+                "original_failure": prior_failure,
+                "failure_record_preserved": True,
+                "counts_as_clean_scheduler_success": False,
+            }
         _write_json(
             output / "accounts" / f"{trading_date}.json",
             record["account"],
@@ -219,11 +230,26 @@ def main() -> int:
                 "slippage": record["execution"]["slippage"],
                 "alerts": record["alerts"],
                 "manual_interventions": record["manual_interventions"],
+                "recovery": record.get("recovery"),
             },
         )
         _write_json(success_path, record)
     except Exception as exc:
-        _record_failure(output, trading_date, str(exc), observed_at)
+        if prior_failure is None:
+            _record_failure(output, trading_date, str(exc), observed_at)
+        else:
+            _write_json(
+                output
+                / "recovery_failures"
+                / f"{trading_date}-{observed_at.strftime('%H%M%S')}.json",
+                {
+                    "trading_date": trading_date.isoformat(),
+                    "observed_at": observed_at.isoformat(),
+                    "status": "RECOVERY_FAILED",
+                    "reason": str(exc),
+                    "original_failure_record": str(failure_path),
+                },
+            )
         raise
     print(json.dumps({"status": "SUCCEEDED", "output": str(success_path)}, ensure_ascii=False))
     return 0
