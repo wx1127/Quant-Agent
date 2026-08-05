@@ -206,15 +206,15 @@ def _build_next_day_drafts(
     )
     created_at = datetime.combine(signal_date, time(16, 5), tzinfo=_SHANGHAI)
     drafts: list[OrderDraft] = []
-    for instrument_id, holding in sorted(holdings.items()):
+    for instrument_id in sorted(holdings):
         signal = exit_signals.get(instrument_id)
         if (
             signal is None
-            or holding.available_quantity < 100
+            or int(signal["quantity"]) < 100
             or instrument_id not in prices
         ):
             continue
-        quantity = holding.available_quantity - holding.available_quantity % 100
+        quantity = int(signal["quantity"])
         drafts.append(
             _draft(account, instrument_id, Side.SELL, quantity, prices[instrument_id], created_at)
         )
@@ -435,12 +435,16 @@ def _evaluate_exit_rules(
         if not reasons:
             continue
         reasons.sort(key=lambda item: (int(item["priority"]), str(item["rule_id"])))
-        available = holding.available_quantity - holding.available_quantity % 100
+        next_day_quantity = holding.quantity - holding.quantity % 100
         signals[instrument_id] = {
             "instrument_id": instrument_id,
             "action": Side.SELL.value,
-            "status": "READY" if available >= 100 else "BLOCKED_T_PLUS_ONE",
-            "quantity": available,
+            "status": (
+                "READY_AFTER_T_PLUS_ONE_RELEASE"
+                if holding.frozen_quantity
+                else "READY"
+            ),
+            "quantity": next_day_quantity,
             "primary_rule": reasons[0]["rule_id"],
             "reasons": reasons,
         }

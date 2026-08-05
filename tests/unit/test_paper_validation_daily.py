@@ -327,7 +327,7 @@ def test_exit_layer_covers_loss_profit_trailing_ma_market_and_time_rules() -> No
     assert signals[off_mainline_id]["primary_rule"] == "MAINLINE_EXIT"
 
 
-def test_exit_signal_is_recorded_but_not_sellable_when_t_plus_one_frozen() -> None:
+def test_exit_signal_can_sell_next_day_after_t_plus_one_release() -> None:
     instrument_id = "CN.SH.600201"
     signals = _evaluate_exit_rules(
         {instrument_id: _holding(instrument_id, cost=10, available=0)},
@@ -338,5 +338,5 @@ def test_exit_signal_is_recorded_but_not_sellable_when_t_plus_one_frozen() -> No
     )
 
     assert signals[instrument_id]["primary_rule"] == "STOP_LOSS"
-    assert signals[instrument_id]["status"] == "BLOCKED_T_PLUS_ONE"
-    assert signals[instrument_id]["quantity"] == 0
+    assert signals[instrument_id]["status"] == "READY_AFTER_T_PLUS_ONE_RELEASE"
+    assert signals[instrument_id]["quantity"] == 1000

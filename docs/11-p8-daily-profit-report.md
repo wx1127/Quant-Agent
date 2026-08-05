@@ -95,8 +95,9 @@ The first version uses these deterministic thresholds:
 
 Risk exits have priority over candidate rotation. Every signal records all matched
 reasons and the highest-priority primary rule. A stock bought that morning remains
-frozen under T+1: the exit signal is retained as `BLOCKED_T_PLUS_ONE`, and no
-unexecutable sell draft is created. The signal is evaluated again on the next close.
+frozen for same-day selling under T+1, but a next-trading-day sell draft is valid.
+Such a signal is marked `READY_AFTER_T_PLUS_ONE_RELEASE`; the next-day executor must
+release the frozen quantity before simulation and must never create a same-day fill.
 
 Position state stores entry date, evaluated trading-day count, peak close, and last
 evaluation date in the pending draft. State inferred for a legacy holding is marked
@@ -109,7 +110,7 @@ explicitly and is never presented as an observed historical entry date.
 - Stocks with daily price limits above 10% and Hong Kong candidates are listed in
   `excluded_buy_candidates` and do not enter buy drafts.
 - Stocks with an absolute daily return above 10% are removed before scoring and ranking.
-- Exit evidence covers all configured rules, their priorities, and T+1 blocking.
+- Exit evidence covers all configured rules, priorities, and T+1 next-day release.
 - Same-day close data is not used to create same-day fills.
 - Pending drafts with display-only `name` fields can still be read and executed.
 - Tests, lint, and type checks pass.
