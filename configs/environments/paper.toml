@@ -9,7 +9,7 @@ level = "INFO"
 json = true
 
 [storage]
-database_url = "postgresql://quant_agent:change-me@localhost:5432/quant_agent_paper"
+database_url = "postgresql+psycopg://quant_agent:change-me@localhost:5432/quant_agent_paper"
 research_storage_path = "./data/paper"
 
 [secrets]

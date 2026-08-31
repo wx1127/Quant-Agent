@@ -208,3 +208,35 @@ class IndustryMembership(BaseModel):
         if self.effective_to is not None and self.effective_to < self.effective_from:
             raise ValueError("effective_to cannot precede effective_from")
         return self
+
+
+class IndexConstituentWeight(BaseModel):
+    """Point-in-time index constituent weight snapshot."""
+
+    model_config = ConfigDict(frozen=True)
+
+    index_instrument_id: str
+    constituent_instrument_id: str
+    trade_date: date
+    weight_percent: Decimal
+    available_at: datetime
+    source: str
+    version: str
+
+    @field_validator("available_at")
+    @classmethod
+    def validate_available_at(cls, value: datetime) -> datetime:
+        return ensure_aware(value)
+
+    @field_validator("weight_percent")
+    @classmethod
+    def validate_weight(cls, value: Decimal) -> Decimal:
+        if value < 0 or value > 100:
+            raise ValueError("index constituent weight must be between 0 and 100 percent")
+        return value
+
+    @model_validator(mode="after")
+    def validate_instruments(self) -> "IndexConstituentWeight":
+        if self.index_instrument_id == self.constituent_instrument_id:
+            raise ValueError("index cannot be its own constituent")
+        return self

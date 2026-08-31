@@ -8,9 +8,10 @@ from zoneinfo import ZoneInfo
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect, select
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session
 
+from quant_agent.config import QuantAgentSettings
 from quant_agent.data.domain import DailyBar
 from quant_agent.data.ingestion import DailyBarIngestionService
 from quant_agent.data.models import DailyBarRow, RawPayloadRow
@@ -18,6 +19,20 @@ from quant_agent.data.providers.base import ProviderBatch
 
 TZ = ZoneInfo("Asia/Shanghai")
 ROOT = Path(__file__).resolve().parents[2]
+MIGRATED_TABLES = {
+    "instrument",
+    "instrument_alias",
+    "instrument_status",
+    "market_bar_daily",
+    "financial_statement_point_in_time",
+    "dataset_version",
+}
+
+
+def _alembic_config() -> Config:
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "migrations"))
+    return config
 
 
 def _bar(trade_date: date = date(2026, 7, 30)) -> DailyBar:
@@ -47,28 +62,66 @@ def _batch(bar: DailyBar) -> ProviderBatch[DailyBar]:
     )
 
 
-def test_initial_alembic_migration_creates_and_drops_schema(tmp_path: Path) -> None:
-    database_path = tmp_path / "migration.db"
-    config = Config(str(ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(ROOT / "migrations"))
+def test_local_configuration_uses_zero_config_sqlite() -> None:
+    settings = QuantAgentSettings.from_toml(ROOT / "configs/environments/local.toml")
+
+    assert settings.storage.database_url == "sqlite:///./artifacts/quant_agent.db"
+
+
+def test_initial_alembic_migration_creates_parent_and_drops_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path = tmp_path / "clean" / "nested" / "migration.db"
+    config = _alembic_config()
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
+    monkeypatch.delenv("QUANT_AGENT_DATABASE_URL", raising=False)
 
     command.upgrade(config, "head")
-    from sqlalchemy import create_engine
 
     engine = create_engine(f"sqlite:///{database_path.as_posix()}")
     tables = set(inspect(engine).get_table_names())
-    assert {
-        "instrument",
-        "instrument_alias",
-        "instrument_status",
-        "market_bar_daily",
-        "financial_statement_point_in_time",
-        "dataset_version",
-    } <= tables
+    assert database_path.is_file()
+    assert tables >= MIGRATED_TABLES
 
     command.downgrade(config, "base")
     assert set(inspect(engine).get_table_names()) == {"alembic_version"}
+
+
+def test_default_alembic_url_works_from_clean_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("QUANT_AGENT_DATABASE_URL", raising=False)
+
+    command.upgrade(_alembic_config(), "head")
+
+    database_path = tmp_path / "artifacts" / "quant_agent.db"
+    engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    assert database_path.is_file()
+    assert set(inspect(engine).get_table_names()) >= MIGRATED_TABLES
+
+
+def test_database_url_environment_variable_overrides_alembic_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configured_path = tmp_path / "configured" / "database.db"
+    override_path = tmp_path / "override%20target" / "database.db"
+    config = _alembic_config()
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{configured_path.as_posix()}")
+    monkeypatch.setenv(
+        "QUANT_AGENT_DATABASE_URL",
+        f"sqlite:///{override_path.as_posix()}",
+    )
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{override_path.as_posix()}")
+    assert override_path.is_file()
+    assert not configured_path.exists()
+    assert set(inspect(engine).get_table_names()) >= MIGRATED_TABLES
 
 
 def test_daily_ingestion_is_idempotent_and_archives_raw_payload(

@@ -47,11 +47,22 @@ class FactorQualityRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceCloseRecord:
+    """Comparable unadjusted close from one independent data source."""
+
+    instrument_id: str
+    trade_date: date
+    close: Decimal
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class QualityContext:
     """Dataset view shared by registered rules."""
 
     bars: tuple[BarQualityRecord, ...] = ()
     factors: tuple[FactorQualityRecord, ...] = ()
+    source_closes: tuple[SourceCloseRecord, ...] = ()
     expected_instrument_ids: tuple[str, ...] = ()
     expected_open_dates: tuple[date, ...] = ()
 
@@ -221,6 +232,50 @@ class AdjustmentFactorRule:
         return issues
 
 
+class CrossSourceCloseRule:
+    """Fail a snapshot when independent unadjusted closes materially disagree."""
+
+    rule_id = "CROSS_SOURCE_CLOSE_DEVIATION"
+
+    def __init__(self, relative_tolerance: Decimal = Decimal("0.02")) -> None:
+        if relative_tolerance < 0:
+            raise ValueError("relative_tolerance cannot be negative")
+        self._tolerance = relative_tolerance
+
+    def evaluate(self, context: QualityContext) -> Sequence[QualityIssue]:
+        grouped: dict[tuple[str, date], dict[str, Decimal]] = {}
+        for item in context.source_closes:
+            grouped.setdefault((item.instrument_id, item.trade_date), {})[item.source] = item.close
+        issues: list[QualityIssue] = []
+        for (instrument_id, trade_date), values_by_source in sorted(grouped.items()):
+            values = tuple(values_by_source.values())
+            if len(values) < 2:
+                continue
+            lowest = min(values)
+            highest = max(values)
+            if lowest <= 0:
+                issues.append(
+                    QualityIssue(
+                        self.rule_id,
+                        QualitySeverity.ERROR,
+                        f"{instrument_id}:{trade_date}",
+                        "cross-source close must be positive",
+                    )
+                )
+                continue
+            relative_deviation = highest / lowest - Decimal(1)
+            if relative_deviation > self._tolerance:
+                issues.append(
+                    QualityIssue(
+                        self.rule_id,
+                        QualitySeverity.ERROR,
+                        f"{instrument_id}:{trade_date}",
+                        (f"cross-source close deviation exceeds tolerance: {relative_deviation}"),
+                    )
+                )
+        return issues
+
+
 class QualityEngine:
     """Run registered rules and optionally persist every result."""
 
@@ -235,6 +290,7 @@ class QualityEngine:
                 DuplicateBarRule(),
                 CalendarCompletenessRule(),
                 AdjustmentFactorRule(),
+                CrossSourceCloseRule(),
             )
         )
 

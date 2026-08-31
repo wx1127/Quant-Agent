@@ -1,0 +1,22 @@
+name: quant-agent
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quant_agent
+      POSTGRES_USER: quant_agent
+      POSTGRES_PASSWORD: ${QUANT_AGENT_POSTGRES_PASSWORD:-change-me-local-only}
+    ports:
+      - "127.0.0.1:${QUANT_AGENT_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - quant_agent_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant_agent -d quant_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  quant_agent_postgres_data:

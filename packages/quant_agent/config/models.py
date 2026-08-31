@@ -1,10 +1,31 @@
 """Versionable settings models with secure defaults."""
 
+import os
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+
+VaultResolver = Callable[[str], str | None]
+
+_ENVIRONMENT_OVERRIDES: dict[str, tuple[str, str]] = {
+    "QUANT_AGENT_APP_ENV": ("runtime", "app_env"),
+    "QUANT_AGENT_RUNTIME_MODE": ("runtime", "mode"),
+    "QUANT_AGENT_TIMEZONE": ("runtime", "timezone"),
+    "QUANT_AGENT_ALLOW_LIVE_AUTO": ("runtime", "allow_live_auto"),
+    "QUANT_AGENT_LOG_LEVEL": ("logging", "level"),
+    "QUANT_AGENT_LOG_JSON": ("logging", "json"),
+    "QUANT_AGENT_DATABASE_URL": ("storage", "database_url"),
+    "QUANT_AGENT_RESEARCH_STORAGE_PATH": ("storage", "research_storage_path"),
+    "QUANT_AGENT_MARKET_DATA_TOKEN_REF": ("secrets", "market_data_token_ref"),
+    "QUANT_AGENT_LLM_API_KEY_REF": ("secrets", "llm_api_key_ref"),
+}
+_BOOLEAN_OVERRIDES = {
+    "QUANT_AGENT_ALLOW_LIVE_AUTO",
+    "QUANT_AGENT_LOG_JSON",
+}
 
 
 class RuntimeMode(StrEnum):
@@ -52,6 +73,43 @@ class SecretReference(str):
         if value in {"env://", "vault://"}:
             raise ValueError("secret reference target cannot be empty")
         return cls(value)
+
+
+def _parse_boolean(name: str, value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
+def _resolve_reference(
+    value: str,
+    *,
+    environ: Mapping[str, str],
+    vault_resolver: VaultResolver | None,
+) -> str:
+    scheme, separator, target = value.partition("://")
+    if not separator:
+        return value
+    if scheme not in {"env", "vault"}:
+        return value
+    if not target:
+        raise ValueError("configuration reference target cannot be empty")
+    if scheme == "env":
+        resolved = environ.get(target)
+        if not resolved:
+            raise ValueError(f"required environment variable is not set: {target}")
+        return resolved
+    if scheme == "vault":
+        if vault_resolver is None:
+            raise ValueError("vault reference requires an explicit resolver")
+        resolved = vault_resolver(target)
+        if not resolved:
+            raise ValueError(f"vault resolver returned no value for: {target}")
+        return resolved
+    raise AssertionError("unreachable reference scheme")
 
 
 class RuntimeSettings(BaseModel):
@@ -102,6 +160,13 @@ class StorageSettings(BaseModel):
     database_url: str
     research_storage_path: str
 
+    @field_validator("database_url", "research_storage_path")
+    @classmethod
+    def reject_empty_value(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("storage value cannot be empty")
+        return value
+
 
 class SecretSettings(BaseModel):
     """References to provider credentials."""
@@ -110,6 +175,35 @@ class SecretSettings(BaseModel):
 
     market_data_token_ref: SecretReference
     llm_api_key_ref: SecretReference
+
+
+class ResolvedStorageSettings(BaseModel):
+    """Runtime storage values with credentials hidden from representations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    database_url: SecretStr
+    research_storage_path: str
+
+
+class ResolvedSecretSettings(BaseModel):
+    """Resolved provider credentials hidden by Pydantic's secret type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    market_data_token: SecretStr
+    llm_api_key: SecretStr
+
+
+class ResolvedQuantAgentSettings(BaseModel):
+    """Values safe to pass to runtime components without leaking secrets in logs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    runtime: RuntimeSettings
+    logging: LoggingSettings
+    storage: ResolvedStorageSettings
+    secrets: ResolvedSecretSettings
 
 
 class QuantAgentSettings(BaseModel):
@@ -132,3 +226,110 @@ class QuantAgentSettings(BaseModel):
         with config_path.open("rb") as config_file:
             raw = tomllib.load(config_file)
         return cls.model_validate(raw)
+
+    @classmethod
+    def load(
+        cls,
+        path: str | Path,
+        *,
+        environ: Mapping[str, str] | None = None,
+    ) -> "QuantAgentSettings":
+        """Load TOML and apply only the documented environment overrides."""
+
+        source = os.environ if environ is None else environ
+        payload = cls.from_toml(path).model_dump(by_alias=True)
+        for name, (section, key) in _ENVIRONMENT_OVERRIDES.items():
+            if name not in source:
+                continue
+            value: str | bool = source[name]
+            if name == "QUANT_AGENT_DATABASE_URL":
+                value = f"env://{name}"
+            elif name in _BOOLEAN_OVERRIDES:
+                value = _parse_boolean(name, source[name])
+            section_payload = payload[section]
+            if not isinstance(section_payload, dict):
+                raise TypeError(f"configuration section is not an object: {section}")
+            section_payload[key] = value
+        return cls.model_validate(payload)
+
+    def resolve_database_url(
+        self,
+        *,
+        environ: Mapping[str, str] | None = None,
+        vault_resolver: VaultResolver | None = None,
+    ) -> SecretStr:
+        """Resolve and mask the database URL independently of provider secrets."""
+
+        source = os.environ if environ is None else environ
+        return SecretStr(
+            _resolve_reference(
+                self.storage.database_url,
+                environ=source,
+                vault_resolver=vault_resolver,
+            )
+        )
+
+    def resolve_market_data_token(
+        self,
+        *,
+        environ: Mapping[str, str] | None = None,
+        vault_resolver: VaultResolver | None = None,
+    ) -> SecretStr:
+        """Resolve only the market-data credential needed by ingestion workers."""
+
+        source = os.environ if environ is None else environ
+        return SecretStr(
+            _resolve_reference(
+                self.secrets.market_data_token_ref,
+                environ=source,
+                vault_resolver=vault_resolver,
+            )
+        )
+
+    def resolve_llm_api_key(
+        self,
+        *,
+        environ: Mapping[str, str] | None = None,
+        vault_resolver: VaultResolver | None = None,
+    ) -> SecretStr:
+        """Resolve only the LLM credential needed by a future Agent process."""
+
+        source = os.environ if environ is None else environ
+        return SecretStr(
+            _resolve_reference(
+                self.secrets.llm_api_key_ref,
+                environ=source,
+                vault_resolver=vault_resolver,
+            )
+        )
+
+    def resolve(
+        self,
+        *,
+        environ: Mapping[str, str] | None = None,
+        vault_resolver: VaultResolver | None = None,
+    ) -> ResolvedQuantAgentSettings:
+        """Resolve every external reference, failing closed when one is unavailable."""
+
+        source = os.environ if environ is None else environ
+        return ResolvedQuantAgentSettings(
+            runtime=self.runtime,
+            logging=self.logging,
+            storage=ResolvedStorageSettings(
+                database_url=self.resolve_database_url(
+                    environ=source,
+                    vault_resolver=vault_resolver,
+                ),
+                research_storage_path=self.storage.research_storage_path,
+            ),
+            secrets=ResolvedSecretSettings(
+                market_data_token=self.resolve_market_data_token(
+                    environ=source,
+                    vault_resolver=vault_resolver,
+                ),
+                llm_api_key=self.resolve_llm_api_key(
+                    environ=source,
+                    vault_resolver=vault_resolver,
+                ),
+            ),
+        )

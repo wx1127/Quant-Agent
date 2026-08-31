@@ -9,8 +9,11 @@ from quant_agent.data.domain import (
     AdjustmentFactor,
     DailyBar,
     FundamentalPoint,
+    IndexConstituentWeight,
+    Industry,
     IndustryMembership,
     Instrument,
+    InstrumentType,
     TradingDay,
 )
 
@@ -66,7 +69,13 @@ class ProviderBatch[T]:
 class MarketDataProvider(Protocol):
     """Provider-neutral P1 market-data interface."""
 
-    def fetch_instruments(self, as_of: date) -> ProviderBatch[Instrument]: ...
+    def fetch_instruments(
+        self,
+        as_of: date,
+        *,
+        instrument_type: InstrumentType = InstrumentType.STOCK,
+        market: str | None = None,
+    ) -> ProviderBatch[Instrument]: ...
 
     def fetch_trading_calendar(
         self,
@@ -79,21 +88,44 @@ class MarketDataProvider(Protocol):
         self,
         trade_date: date,
         instrument_ids: Sequence[str] | None = None,
+        *,
+        instrument_type: InstrumentType = InstrumentType.STOCK,
     ) -> ProviderBatch[DailyBar]: ...
 
     def fetch_adjustment_factors(
         self,
         trade_date: date,
         instrument_ids: Sequence[str] | None = None,
+        *,
+        instrument_type: InstrumentType = InstrumentType.STOCK,
     ) -> ProviderBatch[AdjustmentFactor]: ...
+
+    def fetch_index_constituent_weights(
+        self,
+        index_id: str,
+        start: date,
+        end: date,
+    ) -> ProviderBatch[IndexConstituentWeight]: ...
 
     def fetch_fundamentals(
         self,
         instrument_ids: Sequence[str],
         as_of: datetime,
+        *,
+        start_date: date,
     ) -> ProviderBatch[FundamentalPoint]: ...
+
+    def fetch_industries(
+        self,
+        as_of: date,
+        classification: str,
+        level: int | None = None,
+    ) -> ProviderBatch[Industry]: ...
 
     def fetch_industry_memberships(
         self,
         as_of: date,
+        *,
+        classification: str,
+        l3_codes: Sequence[str],
     ) -> ProviderBatch[IndustryMembership]: ...

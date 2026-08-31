@@ -9,8 +9,8 @@ level = "INFO"
 json = true
 
 [storage]
-database_url = "postgresql://quant_agent:change-me@localhost:5432/quant_agent"
-research_storage_path = "./data/research"
+database_url = "sqlite:///./artifacts/quant_agent.db"
+research_storage_path = "./artifacts/snapshots"
 
 [secrets]
 market_data_token_ref = "env://MARKET_DATA_TOKEN"

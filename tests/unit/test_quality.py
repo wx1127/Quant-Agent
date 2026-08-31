@@ -14,6 +14,7 @@ from quant_agent.data.quality import (
     QualityContext,
     QualityEngine,
     QualitySeverity,
+    SourceCloseRecord,
 )
 
 TZ = ZoneInfo("Asia/Shanghai")
@@ -58,7 +59,7 @@ def test_quality_engine_passes_valid_complete_dataset(
 
     assert report.qualified is True
     persisted = list(db_session.scalars(select(DataQualityResultRow)))
-    assert len(persisted) == 4
+    assert len(persisted) == 5
     assert all(item.passed for item in persisted)
 
 
@@ -102,3 +103,28 @@ def test_quality_engine_detects_invalid_duplicate_missing_and_factor_jump() -> N
         "ADJUSTMENT_FACTOR_CONTINUITY",
     }
     assert any(issue.severity is QualitySeverity.WARNING for issue in report.issues)
+
+
+def test_cross_source_close_deviation_blocks_qualified_snapshot() -> None:
+    trade_date = date(2026, 7, 30)
+    records = (
+        SourceCloseRecord(
+            instrument_id="CN.SZ.000001",
+            trade_date=trade_date,
+            close=Decimal("10.00"),
+            source="provider-a",
+        ),
+        SourceCloseRecord(
+            instrument_id="CN.SZ.000001",
+            trade_date=trade_date,
+            close=Decimal("10.50"),
+            source="provider-b",
+        ),
+    )
+
+    report = QualityEngine().run("cross-source", QualityContext(source_closes=records))
+
+    assert report.qualified is False
+    assert len(report.issues) == 1
+    assert report.issues[0].rule_id == "CROSS_SOURCE_CLOSE_DEVIATION"
+    assert report.issues[0].severity is QualitySeverity.ERROR

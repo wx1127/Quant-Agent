@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "A controlled quantitative research and trading-assistance agent."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -16,10 +16,15 @@ dependencies = [
   "alembic>=1.14,<2",
   "duckdb>=1.2,<2",
   "httpx>=0.28,<1",
+  "psycopg[binary]>=3.3,<4",
   "pydantic>=2.10,<3",
   "pyarrow>=18,<24",
   "sqlalchemy>=2.0,<3",
+  "tzdata>=2026.1; sys_platform == 'win32'",
 ]
+
+[project.scripts]
+quant-agent = "quant_agent.cli:main"
 
 [project.optional-dependencies]
 dev = [

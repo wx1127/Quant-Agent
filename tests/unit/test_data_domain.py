@@ -12,6 +12,7 @@ from quant_agent.data.domain import (
     CorporateAction,
     DailyBar,
     FundamentalPoint,
+    IndexConstituentWeight,
     IndustryMembership,
     Instrument,
     InstrumentType,
@@ -112,3 +113,28 @@ def test_industry_membership_rejects_reverse_range() -> None:
             source="test",
             version="v1",
         )
+
+
+def test_index_constituent_weight_validates_range_identity_and_time() -> None:
+    payload = {
+        "index_instrument_id": "CN.CSI.000300",
+        "constituent_instrument_id": "CN.SH.600000",
+        "trade_date": date(2026, 7, 31),
+        "weight_percent": Decimal("1.25"),
+        "available_at": datetime(2026, 7, 31, 18, tzinfo=TZ),
+        "source": "test",
+        "version": "v1",
+    }
+    valid = IndexConstituentWeight.model_validate(payload)
+    assert valid.weight_percent == Decimal("1.25")
+
+    with pytest.raises(ValidationError, match="between 0 and 100"):
+        IndexConstituentWeight.model_validate(payload | {"weight_percent": Decimal("101")})
+
+    with pytest.raises(ValidationError, match="own constituent"):
+        IndexConstituentWeight.model_validate(
+            payload | {"constituent_instrument_id": payload["index_instrument_id"]}
+        )
+
+    with pytest.raises(ValidationError, match="timezone information"):
+        IndexConstituentWeight.model_validate(payload | {"available_at": datetime(2026, 7, 31, 18)})

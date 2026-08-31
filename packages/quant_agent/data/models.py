@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -139,13 +140,59 @@ class RawPayloadRow(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(64), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=shanghai_now,
+    )
+
+    __table_args__ = (Index("ix_raw_payload_request_hash", "provider", "endpoint", "request_hash"),)
+
+
+class CuratedRecordLineageRow(Base):
+    """Immutable association between one curated record and its raw source payload."""
+
+    __tablename__ = "curated_record_lineage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payload.id"),
+        nullable=False,
+    )
+    dataset: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "raw_payload_id",
+            "dataset",
+            "entity_type",
+            "entity_key",
+            "content_hash",
+            name="uq_curated_record_lineage_association",
+        ),
+        Index(
+            "ix_curated_record_lineage_entity",
+            "dataset",
+            "entity_type",
+            "entity_key",
+            "content_hash",
+        ),
     )
 
 
@@ -184,6 +231,56 @@ class DailyBarRow(Base):
             name="uq_daily_bar_version",
         ),
         Index("ix_daily_bar_instrument_date", "instrument_id", "trade_date"),
+    )
+
+
+class IndexConstituentWeightRow(Base):
+    """Point-in-time percentage weight of an instrument within an index."""
+
+    __tablename__ = "index_constituent_weight"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    index_instrument_id: Mapped[str] = mapped_column(
+        ForeignKey("instrument.instrument_id"),
+        nullable=False,
+    )
+    constituent_instrument_id: Mapped[str] = mapped_column(
+        ForeignKey("instrument.instrument_id"),
+        nullable=False,
+    )
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    weight_percent: Mapped[Decimal] = mapped_column(Numeric(12, 8), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "weight_percent >= 0 AND weight_percent <= 100",
+            name="ck_index_constituent_weight_percent",
+        ),
+        CheckConstraint(
+            "index_instrument_id <> constituent_instrument_id",
+            name="ck_index_constituent_distinct_instruments",
+        ),
+        UniqueConstraint(
+            "index_instrument_id",
+            "constituent_instrument_id",
+            "trade_date",
+            "source",
+            "version",
+            name="uq_index_constituent_weight_version",
+        ),
+        Index(
+            "ix_index_constituent_weight_date",
+            "index_instrument_id",
+            "trade_date",
+        ),
     )
 
 
@@ -355,6 +452,62 @@ class IndustryMembershipRow(Base):
     )
 
 
+class EventEvidenceRow(Base):
+    """Immutable structured event whose source text remains untrusted raw data."""
+
+    __tablename__ = "event_evidence"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    headline: Mapped[str] = mapped_column(String(512), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_record_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    source_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    trust_level: Mapped[str] = mapped_column(String(32), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "source_record_id",
+            "version",
+            name="uq_event_evidence_source_revision",
+        ),
+        Index(
+            "ix_event_evidence_point_in_time",
+            "available_at",
+            "event_type",
+        ),
+    )
+
+
+class EventInstrumentLinkRow(Base):
+    """Many-to-many entity mapping from one event to known instruments."""
+
+    __tablename__ = "event_instrument_link"
+
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("event_evidence.event_id"),
+        primary_key=True,
+    )
+    instrument_id: Mapped[str] = mapped_column(
+        ForeignKey("instrument.instrument_id"),
+        primary_key=True,
+    )
+
+    __table_args__ = (Index("ix_event_instrument_lookup", "instrument_id", "event_id"),)
+
+
 class DataQualityResultRow(Base):
     """Persisted result from one data-quality rule."""
 
@@ -385,4 +538,130 @@ class DatasetVersionRow(Base):
         DateTime(timezone=True),
         nullable=False,
         default=shanghai_now,
+    )
+
+
+class DataSyncRunRow(Base):
+    """One auditable incremental, backfill, or replay synchronization run."""
+
+    __tablename__ = "data_sync_run"
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    dataset: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
+    requested_from: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    target_watermark: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    checkpoint_before: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    checkpoint_after: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    code_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_data_sync_run_idempotency"),
+        Index("ix_data_sync_run_dataset_state", "provider", "dataset", "state"),
+    )
+
+
+class DataSyncCheckpointRow(Base):
+    """Leased, optimistic-lock-protected progress for one provider dataset scope."""
+
+    __tablename__ = "data_sync_checkpoint"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    dataset: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    committed_watermark: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    active_partition: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    resume_cursor: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    last_success_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("data_sync_run.run_id"),
+    )
+    progress_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "data_sync_run.run_id",
+            name="fk_data_sync_checkpoint_progress_run",
+        ),
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "dataset",
+            "scope_hash",
+            name="uq_data_sync_checkpoint_scope",
+        ),
+        Index("ix_data_sync_checkpoint_lease", "lease_expires_at"),
+    )
+
+
+class DataSyncPageRow(Base):
+    """One resumable logical page fetched and decoded within a synchronization run."""
+
+    __tablename__ = "data_sync_page"
+
+    page_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("data_sync_run.run_id"),
+        nullable=False,
+    )
+    partition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    partition_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    page_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    cursor_in: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    cursor_out: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    raw_payload_id: Mapped[int | None] = mapped_column(ForeignKey("raw_payload.id"))
+    received_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=shanghai_now,
+    )
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "partition_hash",
+            "page_ordinal",
+            name="uq_data_sync_page_ordinal",
+        ),
+        UniqueConstraint(
+            "run_id",
+            "request_hash",
+            name="uq_data_sync_page_request",
+        ),
+        Index("ix_data_sync_page_run_state", "run_id", "state"),
     )

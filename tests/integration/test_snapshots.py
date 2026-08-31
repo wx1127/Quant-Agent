@@ -1,5 +1,6 @@
 """Integration tests for immutable Parquet snapshots and DuckDB queries."""
 
+import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -97,6 +98,50 @@ def test_existing_snapshot_version_rejects_different_content(tmp_path: Path) -> 
         )
 
 
+def test_existing_snapshot_registers_manifest_when_database_record_is_missing(
+    tmp_path: Path,
+    db_session: Session,
+) -> None:
+    store = SnapshotStore(tmp_path)
+    table = pa.table({"value": [1]})
+    report = _quality("v1")
+
+    manifest = store.create("v1", {"daily_bars": table}, quality_report=report)
+    repeated = store.create(
+        "v1",
+        {"daily_bars": table},
+        quality_report=report,
+        session=db_session,
+    )
+
+    stored = db_session.get(DatasetVersionRow, "v1")
+    assert repeated == manifest
+    assert stored is not None
+    assert stored.content_hash == manifest.content_hash
+
+
+def test_existing_snapshot_rejects_conflicting_database_registration(
+    tmp_path: Path,
+    db_session: Session,
+) -> None:
+    store = SnapshotStore(tmp_path)
+    table = pa.table({"value": [1]})
+    report = _quality("v1")
+    store.create("v1", {"daily_bars": table}, quality_report=report, session=db_session)
+    stored = db_session.get(DatasetVersionRow, "v1")
+    assert stored is not None
+    stored.status = "REJECTED"
+    db_session.flush()
+
+    with pytest.raises(ValueError, match="conflicts with the registered"):
+        store.create(
+            "v1",
+            {"daily_bars": table},
+            quality_report=report,
+            session=db_session,
+        )
+
+
 def test_snapshot_publication_is_blocked_by_quality_failure(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="quality failed"):
         SnapshotStore(tmp_path).create(
@@ -113,3 +158,72 @@ def test_snapshot_rejects_unsafe_table_name(tmp_path: Path) -> None:
             {"bad-name": pa.table({"value": [1]})},
             quality_report=_quality("v1"),
         )
+
+
+def test_snapshot_rejects_unsafe_data_version(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unsafe snapshot data version"):
+        SnapshotStore(tmp_path).create(
+            "../outside",
+            {"daily_bars": pa.table({"value": [1]})},
+            quality_report=_quality("../outside"),
+        )
+
+    with pytest.raises(ValueError, match="unsafe snapshot data version"):
+        SnapshotStore(tmp_path).load_manifest("../outside")
+
+
+def test_snapshot_rejects_tampered_manifest_paths(tmp_path: Path) -> None:
+    store = SnapshotStore(tmp_path)
+    store.create(
+        "v1",
+        {"daily_bars": pa.table({"value": [1]})},
+        quality_report=_quality("v1"),
+    )
+    manifest_path = tmp_path / "v1" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["files"][0]["relative_path"] = "../outside.parquet"
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="relative path"):
+        store.load_manifest("v1")
+
+
+def test_snapshot_reuse_and_query_fail_closed_after_hash_tampering(tmp_path: Path) -> None:
+    store = SnapshotStore(tmp_path)
+    table = pa.table({"value": [1]})
+    report = _quality("v1")
+    store.create("v1", {"daily_bars": table}, quality_report=report)
+    manifest_path = tmp_path / "v1" / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["files"][0]["sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        store.create("v1", {"daily_bars": table}, quality_report=report)
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        store.query("v1", "SELECT * FROM daily_bars")
+
+
+def test_new_snapshot_is_removed_when_database_registration_fails(
+    tmp_path: Path,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_registration(_manifest: object, _session: object) -> None:
+        raise RuntimeError("registration failed")
+
+    monkeypatch.setattr(
+        SnapshotStore,
+        "_register_manifest",
+        staticmethod(fail_registration),
+    )
+
+    with pytest.raises(RuntimeError, match="registration failed"):
+        SnapshotStore(tmp_path).create(
+            "v1",
+            {"daily_bars": pa.table({"value": [1]})},
+            quality_report=_quality("v1"),
+            session=db_session,
+        )
+
+    assert not (tmp_path / "v1").exists()

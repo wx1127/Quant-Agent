@@ -4,6 +4,7 @@ channels:
 dependencies:
   - python=3.12
   - pip
+  - setuptools>=80.9
   - pip:
       - -r requirements-dev.lock
       - -e .
