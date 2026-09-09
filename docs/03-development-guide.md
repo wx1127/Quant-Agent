@@ -593,7 +593,7 @@ class BrokerAdapter(Protocol):
 
 ### 14.1 Agent 工具
 
-第一版注册：
+第一版中央策略允许可信装配层显式注册：
 
 ```text
 get_market_snapshot
@@ -609,12 +609,24 @@ build_target_portfolio
 check_portfolio_risk
 create_order_draft
 get_order_draft
+submit_paper_orders
 submit_approved_orders
 reconcile_account
-generate_daily_report
+generate_decision_report
 ```
 
-`approve_order_batch` 不注册为 Agent 工具，只允许审批页面调用。
+`submit_paper_orders` 仅属于 `PAPER`，`submit_approved_orders` 仅属于 `LIVE_ASSISTED`，不能通过
+模型参数选择执行后端。实盘工具参数不接收审批令牌，而由可信服务端授权器提供一次性 context
+manager 租约，在权限审计和同步执行期间保持有效。`approve_order_batch` 不注册为 Agent 工具，
+只允许审批页面调用；`LIVE_AUTO` 不注册任何工具。
+中央目录不会自动扫描领域方法，名称在目录中也不等于 handler 已装配。P6-T03 的七个研究
+wrapper 通过可信 `ResearchInputSource` 接入已有引擎：市场阶段和主线回放完整 PIT 历史，质量
+检查固定决策时间且不写数据库，龙头/候选绑定账户快照，候选保持未校准。P6-T04 的七个组合/
+执行 wrapper 通过可信 `PortfolioExecutionInputSource`、草案工件仓储和 paper gateway 固定连接
+账户快照、目标组合、风险、草案、模拟提交与独立核对；`REJECT/ERROR` 不产生草案，paper gateway
+必须经 `PaperExecutionService`，不能绕过 Kill Switch 或仓储 CAS。当前尚无生产 Parquet 领域
+解码 source、耐久草案仓储、真实券商执行 handler 和生产级审批基础设施；依赖未交付前不得注册
+占位 source 或 `submit_approved_orders`。
 
 ### 14.2 编排规则
 

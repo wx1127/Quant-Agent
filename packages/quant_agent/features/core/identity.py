@@ -8,7 +8,21 @@ def canonical_decimal(value: Decimal, *, field_name: str = "decimal") -> str:
 
     if not value.is_finite():
         raise ValueError(f"{field_name} must be finite")
-    normalized = value.normalize()
-    if normalized == 0:
+    sign, raw_digits, exponent = value.as_tuple()
+    if not isinstance(exponent, int):
+        raise ValueError(f"{field_name} has an invalid exponent")
+    if not any(raw_digits):
         return "0"
-    return format(normalized, "f")
+    digits = list(raw_digits)
+    while digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    coefficient = "".join(str(digit) for digit in digits)
+    point = len(coefficient) + exponent
+    if point <= 0:
+        rendered = f"0.{('0' * -point)}{coefficient}"
+    elif point >= len(coefficient):
+        rendered = f"{coefficient}{'0' * (point - len(coefficient))}"
+    else:
+        rendered = f"{coefficient[:point]}.{coefficient[point:]}"
+    return f"-{rendered}" if sign else rendered

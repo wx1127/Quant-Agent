@@ -182,20 +182,43 @@ stateDiagram-v2
 
 ```json
 {
+  "schema_version": "1",
   "decision_id": "dec_20260730_xxxxx",
   "mode": "PAPER",
   "market": "CN_A",
-  "as_of": "2026-07-30T15:10:00+08:00",
+  "as_of": "2026-07-30T07:10:00+00:00",
   "data_version": "market_20260730_eod_v1",
+  "data_content_hash": "<sha256>",
   "strategy_version": "mainline_leader_v0.1.0",
+  "strategy_config_hash": "<sha256>",
   "parameter_version": "balanced_v1",
+  "parameter_hash": "<sha256>",
+  "strategy_refs": [
+    {
+      "strategy_name": "mainline-leader",
+      "strategy_version": "mainline_leader_v0.1.0",
+      "config_hash": "<sha256>",
+      "parameter_version": "balanced_v1",
+      "parameter_hash": "<sha256>",
+      "registered_at": "2026-07-29T07:10:00+00:00"
+    }
+  ],
   "risk_policy_version": "risk_v1",
+  "risk_policy_hash": "<sha256>",
+  "account_id": "paper_account",
   "account_snapshot_id": "paper_account_20260730_151000",
-  "code_commit": "git-sha"
+  "account_snapshot_hash": "<sha256>",
+  "code_commit": "0123456789abcdef0123456789abcdef01234567",
+  "code_artifact_hash": "<sha256>",
+  "agent_version": "quant_agent_harness_v1",
+  "model_version": "provider_model_release_v1",
+  "content_hash": "<sha256>"
 }
 ```
 
 决策开始后不得静默替换数据。如需使用更新数据，必须创建新的 `decision_id`。
+这里的内容哈希引用不复制底层制品；应用必须在可信存储中保留可按引用解析的原数据和配置，
+完整轨迹聚合与差异回放由 Harness 审计回放模块负责。
 
 ### 8.2 会话记忆
 
@@ -225,15 +248,35 @@ stateDiagram-v2
 | 校验 | `validate_market_data` | 只读 |
 | 分析 | `detect_market_regime` | 只读、确定性 |
 | 主线 | `rank_market_themes` | 只读、确定性 |
-| 龙头 | `rank_theme_leaders` | 只读、确定性 |
+| 龙头 | `rank_theme_leaders` | 只读、确定性、账户作用域 |
+| 候选 | `rank_stock_candidates`、`explain_candidate` | 只读、确定性、账户作用域 |
 | 回测 | `run_backtest` | 隔离计算 |
-| 组合 | `build_target_portfolio` | 只生成目标 |
+| 组合 | `get_portfolio_snapshot`、`build_target_portfolio` | 读取账户、只生成目标 |
 | 风控 | `check_portfolio_risk` | 只读、可否决 |
-| 订单 | `create_order_draft` | 不可提交 |
+| 订单 | `create_order_draft`、`get_order_draft` | 草案不可直接执行 |
 | 审批 | `approve_order_batch` | 仅人工入口 |
-| 执行 | `submit_approved_orders` | 需审批令牌 |
+| 模拟执行 | `submit_paper_orders` | 仅 `PAPER`，写操作 |
+| 实盘执行 | `submit_approved_orders` | 仅 `LIVE_ASSISTED`，需外部授权租约 |
 | 核对 | `reconcile_account` | 只读 |
 | 报告 | `generate_decision_report` | 只读 |
+
+中央策略是权限上限，具体 handler 仍须由可信装配层逐个显式注册。`RESEARCH` 只开放研究与报告
+只读工具；`BACKTEST` 仅在此基础上增加隔离回测；`PAPER` 开放账户、组合、风控、草案、模拟
+提交和核对；`LIVE_ASSISTED` 使用独立的实盘提交入口，不能调用模拟提交；`LIVE_AUTO` 的工具集
+为空且注册器拒绝构建。`approve_order_batch`、运行模式切换、风控阈值修改和 Kill Switch 恢复
+属于人工或管理面入口，不得注册为 Agent 工具。
+
+中央目录中存在工具名只表示“允许可信装配层在指定模式注册”，不表示对应业务 handler
+已实现或已接通外部系统。市场快照、质量、市场阶段、主线、龙头、候选和候选解释的七个只读
+handler，以及账户快照、目标组合、风险、草案、模拟提交和核对的七个组合/执行 handler 已实现；
+生产 Parquet 到领域快照的解码 source 与耐久草案仓储尚未交付，依赖不完整时不得注册占位
+handler。真实券商执行、生产级人工审批/授权服务和跨进程耐久审计基础设施仍未交付。
+
+组合与模拟交易工具固定连接账户快照 → 目标组合 → 独立风控 → 不可执行订单草案 → 模拟提交 →
+独立核对。创建草案只接受 `PASS/WARN` 风险结果；提交必须读取账户和决策绑定的已存储草案，
+并通过 `PaperExecutionService` 保持 Kill Switch 锁、账户状态 CAS、批次唯一消费与回执幂等。核对
+使用独立观察证据，返回停止信号但不在只读工具中隐式修改 Kill Switch。真实券商提交与 paper
+gateway 不得共享工具、凭证或仓储。
 
 ### 9.2 通用工具响应
 
@@ -257,12 +300,15 @@ stateDiagram-v2
 ### 9.3 工具调用硬约束
 
 1. 所有写操作必须携带幂等键。
-2. 实盘执行必须同时携带订单摘要、审批令牌和过期时间。
+2. 实盘执行参数不得由模型携带审批令牌；可信外部授权器必须原子核验并预留/消费与决策及订单
+   批次绑定的批准，在允许审计和 handler 执行期间持续持有一次性授权租约。
 3. Agent 不得构造任意证券代码，代码必须来自合格标的池。
 4. Agent 不得把工具错误解释成“无风险”或“无信号”。
 5. 工具返回的警告必须进入最终报告。
 6. 超时重试不得导致重复下单。
 7. 同一 `decision_id` 的策略和参数版本必须保持不变。
+8. 市场阶段和主线必须回放截至 `as_of` 的完整严格递增历史，不能只计算最后一天。
+9. 龙头、候选及候选解释必须绑定决策中的账户快照；模型不能提交账户规模或覆盖该身份。
 
 ## 10. 市场分析输出契约
 

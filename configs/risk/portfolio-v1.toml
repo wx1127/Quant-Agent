@@ -1,0 +1,12 @@
+[portfolio_risk]
+version = "portfolio-risk-policy-v1"
+maximum_total_weight = "0.95"
+maximum_etf_weight = "0.70"
+maximum_stock_weight = "0.25"
+maximum_single_etf_weight = "0.25"
+maximum_single_stock_weight = "0.10"
+maximum_stock_industry_weight = "0.20"
+turnover_warning_threshold = "0.20"
+maximum_one_way_turnover = "0.35"
+drawdown_warning_threshold = "0.08"
+drawdown_stop_new_risk_threshold = "0.12"

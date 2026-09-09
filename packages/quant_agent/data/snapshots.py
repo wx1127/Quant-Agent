@@ -153,9 +153,7 @@ class SnapshotStore:
         self._root.mkdir(parents=True, exist_ok=True)
         target = self._root / data_version
         if target.exists():
-            existing = self.load_manifest(data_version)
-            if not self.verify(data_version):
-                raise ValueError("snapshot integrity verification failed")
+            existing = self.load_verified_manifest(data_version)
             expected_metadata = metadata or {}
             if existing.metadata != expected_metadata:
                 raise ValueError("snapshot version already exists with different metadata")
@@ -205,9 +203,15 @@ class SnapshotStore:
             shutil.rmtree(temp_root, ignore_errors=True)
             raise
 
-        if not self.verify(data_version):
+        try:
+            verified_manifest = self.load_verified_manifest(data_version)
+        except ValueError:
             shutil.rmtree(target, ignore_errors=True)
-            raise ValueError("snapshot integrity verification failed")
+            raise
+        if verified_manifest != manifest:
+            shutil.rmtree(target, ignore_errors=True)
+            raise ValueError("published snapshot manifest changed during verification")
+        manifest = verified_manifest
         try:
             self._register_manifest(manifest, session)
         except Exception:
@@ -231,7 +235,18 @@ class SnapshotStore:
         """Verify every file hash and the manifest content hash."""
 
         manifest = self.load_manifest(data_version)
-        snapshot_dir = self._root / data_version
+        return self._verify_loaded_manifest(manifest)
+
+    def load_verified_manifest(self, data_version: str) -> SnapshotManifest:
+        """Return the exact manifest whose referenced content was verified."""
+
+        manifest = self.load_manifest(data_version)
+        if not self._verify_loaded_manifest(manifest):
+            raise ValueError("snapshot integrity verification failed")
+        return SnapshotManifest.model_validate_json(manifest.model_dump_json())
+
+    def _verify_loaded_manifest(self, manifest: SnapshotManifest) -> bool:
+        snapshot_dir = self._root / manifest.data_version
         for item in manifest.files:
             path = snapshot_dir / item.relative_path
             if not path.is_file() or _file_hash(path) != item.sha256:
@@ -247,9 +262,7 @@ class SnapshotStore:
 
         if not _SAFE_NAME.fullmatch(name):
             raise ValueError(f"unsafe snapshot table name: {name}")
-        if not self.verify(data_version):
-            raise ValueError("snapshot integrity verification failed")
-        manifest = self.load_manifest(data_version)
+        manifest = self.load_verified_manifest(data_version)
         known = {item.name: item.relative_path for item in manifest.files}
         if name not in known:
             raise KeyError(name)
@@ -258,9 +271,7 @@ class SnapshotStore:
     def query(self, data_version: str, sql: str) -> pa.Table:
         """Query snapshot tables through isolated in-memory DuckDB views."""
 
-        if not self.verify(data_version):
-            raise ValueError("snapshot integrity verification failed")
-        manifest = self.load_manifest(data_version)
+        manifest = self.load_verified_manifest(data_version)
         connection = duckdb.connect(
             database=":memory:",
             config={"enable_external_access": "false"},

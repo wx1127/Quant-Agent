@@ -331,6 +331,52 @@ def test_latest_known_revision_wins_and_same_time_conflict_fails_closed() -> Non
         _rule(states=(latest, conflict))
 
 
+def test_public_state_for_preserves_pit_selection_and_price_validation() -> None:
+    earlier = _state(
+        available_at=datetime.combine(DAY, time(9, 31), tzinfo=TZ),
+        revision="earlier",
+    )
+    latest = _state(
+        observed_at=datetime.combine(DAY, time(9, 40), tzinfo=TZ),
+        available_at=datetime.combine(DAY, time(9, 45), tzinfo=TZ),
+        reference_price="10.10",
+        revision="latest",
+    )
+    future = _state(
+        observed_at=ORDER_TIME + timedelta(minutes=1),
+        available_at=ORDER_TIME + timedelta(minutes=1),
+        reference_price="10.20",
+        revision="future",
+    )
+    rule = _rule(states=(future, earlier, latest))
+
+    selected = rule.state_for(
+        instrument_id="CN.SH.TEST",
+        trading_day=DAY,
+        as_of=ORDER_TIME,
+    )
+
+    assert selected is latest
+    with pytest.raises(MarketStateUnavailableError, match="as_of"):
+        rule.state_for(
+            instrument_id="CN.SH.TEST",
+            trading_day=DAY,
+            as_of=datetime.combine(DAY, time(9, 30), tzinfo=TZ),
+        )
+    with pytest.raises(MarketStateUnavailableError, match="as_of"):
+        rule.state_for(
+            instrument_id="CN.SH.OTHER",
+            trading_day=DAY,
+            as_of=ORDER_TIME,
+        )
+    with pytest.raises(OrderPriceError, match="session prices"):
+        _rule(states=(_state(reference_price="10.005"),)).state_for(
+            instrument_id="CN.SH.TEST",
+            trading_day=DAY,
+            as_of=ORDER_TIME,
+        )
+
+
 def test_limit_price_tick_and_daily_boundaries_are_inclusive_and_fail_closed() -> None:
     rule = _rule()
     rule.validate_order(_order(limit_price="11.00"))
@@ -413,6 +459,32 @@ def test_odd_lot_liquidation_fills_exactly_or_preserves_lot_sized_partial() -> N
     assert partial.status is MatchStatus.PARTIALLY_FILLED
     assert partial.filled_quantity == 100
     assert partial.unfilled_quantity == 50
+
+
+def test_match_accepts_dynamic_full_liquidation_and_false_overrides_registration() -> None:
+    dynamic = _rule(
+        states=(_state(quantity="1000"),),
+        participation="1",
+    )
+    rule_hash = dynamic.rule_hash
+
+    full = dynamic.match(
+        _order(side=Side.SELL, quantity="50", limit_price="9.50"),
+        slippage_model=_slippage(),
+        is_full_liquidation=True,
+    )
+
+    assert full.status is MatchStatus.FILLED
+    assert full.filled_quantity == 50
+    assert dynamic.rule_hash == rule_hash
+
+    registered = _rule(liquidation_order_ids=("order-1",))
+    with pytest.raises(OrderQuantityError, match="full odd-lot liquidation"):
+        registered.match(
+            _order(side=Side.SELL, quantity="50", limit_price="9.50"),
+            slippage_model=_slippage(),
+            is_full_liquidation=False,
+        )
 
 
 def test_limit_order_that_cannot_absorb_slippage_is_no_fill() -> None:

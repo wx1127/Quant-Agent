@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,7 +35,7 @@ class AuditEvent(BaseModel):
 
 
 class AuditSink(Protocol):
-    """Append-only audit destination."""
+    """Append-only audit destination whose implementation must be thread-safe."""
 
     def append(self, event: AuditEvent) -> None:
         """Persist one event."""
@@ -45,12 +46,14 @@ class JsonLinesAuditSink:
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
+        self._lock = RLock()
 
     def append(self, event: AuditEvent) -> None:
         """Append a redacted event as one JSON object."""
 
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = redact(event.model_dump(mode="json"))
-        with self._path.open("a", encoding="utf-8") as audit_file:
-            audit_file.write(json.dumps(payload, ensure_ascii=False, sort_keys=True))
-            audit_file.write("\n")
+        line = json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+        with self._lock:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with self._path.open("a", encoding="utf-8") as audit_file:
+                audit_file.write(line)

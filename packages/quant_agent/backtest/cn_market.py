@@ -615,6 +615,35 @@ class CNMarketRule:
 
         self._validate_order(order)
 
+    def state_for(
+        self,
+        *,
+        instrument_id: str,
+        trading_day: date,
+        as_of: datetime,
+    ) -> MarketSessionState:
+        """Return the latest unambiguous session state known by ``as_of``."""
+
+        normalized_instrument_id = _non_empty(instrument_id, "instrument_id")
+        known_at = ensure_aware(as_of)
+        candidates = tuple(
+            state
+            for state in self.session_states
+            if state.instrument_id == normalized_instrument_id
+            and state.trading_day == trading_day
+            and state.observed_at <= known_at
+            and state.available_at <= known_at
+        )
+        if not candidates:
+            raise MarketStateUnavailableError("no market session state was available by as_of")
+        latest_available = max(state.available_at for state in candidates)
+        latest = tuple(state for state in candidates if state.available_at == latest_available)
+        if any(state != latest[0] for state in latest[1:]):
+            raise MarketStateUnavailableError("ambiguous market session revisions at as_of")
+        state = latest[0]
+        self._validate_state_prices(state)
+        return state
+
     def validate_quantity(
         self,
         *,
@@ -647,10 +676,14 @@ class CNMarketRule:
         *,
         slippage_model: CNSlippageModel,
         allow_partial: bool = True,
+        is_full_liquidation: bool | None = None,
     ) -> MatchResult:
         """Return a deterministic full/partial/no-fill result without ledger mutation."""
 
-        state = self._validate_order(order)
+        state = self._validate_order(
+            order,
+            is_full_liquidation=is_full_liquidation,
+        )
         if not slippage_model.applies_on(order.trading_day):
             raise SlippageModelNotFoundError(
                 f"slippage model is not effective on {order.trading_day.isoformat()}"
@@ -659,8 +692,12 @@ class CNMarketRule:
         capacity = state.available_quantity * self.max_participation_rate
         candidate = min(requested, capacity)
         unit = self.buy_lot_size if order.side is Side.BUY else self.sell_lot_size
-        is_full_liquidation = order.order_id in self.odd_lot_liquidation_order_ids
-        if order.side is Side.SELL and self.allow_odd_lot_liquidation and is_full_liquidation:
+        full_liquidation = (
+            order.order_id in self.odd_lot_liquidation_order_ids
+            if is_full_liquidation is None
+            else is_full_liquidation
+        )
+        if order.side is Side.SELL and self.allow_odd_lot_liquidation and full_liquidation:
             fill_quantity = requested if candidate >= requested else _floor_to_unit(candidate, unit)
         else:
             fill_quantity = _floor_to_unit(candidate, unit)
@@ -728,7 +765,12 @@ class CNMarketRule:
             slippage_model_hash=slippage_model.model_hash,
         )
 
-    def _validate_order(self, order: OrderEvent) -> MarketSessionState:
+    def _validate_order(
+        self,
+        order: OrderEvent,
+        *,
+        is_full_liquidation: bool | None = None,
+    ) -> MarketSessionState:
         if order.instrument_type is not self.instrument_type:
             raise CNMarketRuleError("order instrument_type does not match market rule")
         if not self.applies_on(order.trading_day):
@@ -744,7 +786,11 @@ class CNMarketRule:
         self.validate_quantity(
             side=order.side,
             quantity=order.quantity,
-            is_full_liquidation=order.order_id in self.odd_lot_liquidation_order_ids,
+            is_full_liquidation=(
+                order.order_id in self.odd_lot_liquidation_order_ids
+                if is_full_liquidation is None
+                else is_full_liquidation
+            ),
         )
         if order.limit_price is not None:
             self._validate_price(order.limit_price, state, field_name="limit_price")
@@ -753,27 +799,15 @@ class CNMarketRule:
         return state
 
     def _state_for(self, order: OrderEvent) -> MarketSessionState:
-        candidates = tuple(
-            state
-            for state in self.session_states
-            if state.instrument_id == order.instrument_id
-            and state.trading_day == order.trading_day
-            and state.observed_at <= order.event_time
-            and state.available_at <= order.event_time
-        )
-        if not candidates:
-            raise MarketStateUnavailableError(
-                "no market session state was available by order.event_time"
+        try:
+            return self.state_for(
+                instrument_id=order.instrument_id,
+                trading_day=order.trading_day,
+                as_of=order.event_time,
             )
-        latest_available = max(state.available_at for state in candidates)
-        latest = tuple(state for state in candidates if state.available_at == latest_available)
-        if any(state != latest[0] for state in latest[1:]):
-            raise MarketStateUnavailableError(
-                "ambiguous market session revisions at order.event_time"
-            )
-        state = latest[0]
-        self._validate_state_prices(state)
-        return state
+        except MarketStateUnavailableError as error:
+            message = str(error).replace("as_of", "order.event_time")
+            raise MarketStateUnavailableError(message) from error
 
     def _validate_state_prices(self, state: MarketSessionState) -> None:
         prices = (
