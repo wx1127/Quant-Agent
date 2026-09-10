@@ -48,7 +48,11 @@ class TushareResearchProvider:
         if kind == "market":
             rows = self._rows("index_daily", {"ts_code": "000001.SH", "trade_date": trade_date})
         elif kind in {"leaders", "candidates"}:
-            rows = self._rows("daily", {"trade_date": trade_date})
+            rows = self._rows(
+                "daily",
+                {"trade_date": trade_date},
+                fields=("ts_code", "trade_date", "close", "vol", "amount", "pct_chg"),
+            )
             rows = sorted(rows, key=lambda row: float(row.get("pct_chg") or 0), reverse=True)[:20]
         elif kind == "stock" and symbol:
             rows = self._rows("daily", {"ts_code": symbol, "trade_date": trade_date})
@@ -70,8 +74,14 @@ class TushareResearchProvider:
         open_days = [str(row["cal_date"]) for row in rows if str(row.get("is_open")) == "1"]
         return max(open_days) if open_days else today.strftime("%Y%m%d")
 
-    def _rows(self, endpoint: str, params: dict[str, str]) -> tuple[dict[str, Any], ...]:
-        payload = self._provider.fetch_raw_json(endpoint, params)
+    def _rows(
+        self,
+        endpoint: str,
+        params: dict[str, str],
+        *,
+        fields: tuple[str, ...] | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        payload = self._provider.fetch_raw_json(endpoint, params, fields=fields)
         return self._provider.decode_raw_rows(payload, endpoint=endpoint)
 
     @staticmethod
