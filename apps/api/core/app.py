@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -57,6 +58,13 @@ def create_app(
     report_provider=None,
 ) -> FastAPI:  # type: ignore[no-untyped-def]
     app = FastAPI(title="Quant-Agent API", version="1.0.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    )
     router = APIRouter(prefix="/v1")
 
     @app.middleware("http")
