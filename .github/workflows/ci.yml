@@ -39,3 +39,11 @@ jobs:
       - name: Test
         run: python -m pytest
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check Web JavaScript syntax
+        run: node --check apps/web/app.js
+
