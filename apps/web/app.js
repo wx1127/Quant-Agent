@@ -15,7 +15,7 @@ function renderSourceStatus(source) {
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
 function meta(result) {
   const freshness = result.freshness === 'cached' ? '缓存' : '实时';
-  const tradeDate = result.items?.find(item => item.trade_date)?.trade_date;
+  const tradeDate = result.trade_date || result.items?.find(item => item.trade_date)?.trade_date;
   const dateLabel = tradeDate ? `交易日 ${tradeDate}` : `生成 ${result.as_of}`;
   return `${freshness} · ${dateLabel} · ${result.data_version} · ${result.model_version}`;
 }

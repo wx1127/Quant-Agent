@@ -22,6 +22,7 @@ class ResearchResult(BaseModel):
     data_version: str = Field(min_length=1)
     model_version: str = Field(min_length=1)
     freshness: Literal["live", "cached"] = "live"
+    trade_date: str | None = None
     items: tuple[dict[str, Any], ...] = ()
 
 
@@ -115,6 +116,10 @@ class TushareResearchProvider:
             as_of=datetime.now(UTC),
             data_version="tushare-live",
             model_version="raw-provider-v1",
+            trade_date=next(
+                (str(item["trade_date"]) for item in rows if item.get("trade_date")),
+                None,
+            ),
             items=rows,
         )
 
