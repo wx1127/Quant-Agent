@@ -1,5 +1,12 @@
 """Deterministic evaluation of frozen point-in-time research outputs."""
 
+from quant_agent.evaluation.agent_trajectory import (
+    AgentTrajectory,
+    ToolCall,
+    TrajectoryEvaluation,
+    TrajectoryIssue,
+    evaluate_agent_trajectory,
+)
 from quant_agent.evaluation.leader_candidates import (
     LEADER_CANDIDATE_EVALUATION_CODE_VERSION,
     CandidateMetricSlice,
@@ -37,6 +44,7 @@ from quant_agent.evaluation.regime_mainline import (
 __all__ = [
     "LEADER_CANDIDATE_EVALUATION_CODE_VERSION",
     "REGIME_MAINLINE_EVALUATION_CODE_VERSION",
+    "AgentTrajectory",
     "CandidateMetricSlice",
     "CandidatePeriodCoverage",
     "CandidatePrecisionAtK",
@@ -60,6 +68,10 @@ __all__ = [
     "RegimeMainlineEvaluationReport",
     "RegimeStabilityMetrics",
     "RelativeReturnDistribution",
+    "ToolCall",
+    "TrajectoryEvaluation",
+    "TrajectoryIssue",
+    "evaluate_agent_trajectory",
     "evaluate_leader_candidate_history",
     "evaluate_leader_candidates",
     "evaluate_regime_mainline",
