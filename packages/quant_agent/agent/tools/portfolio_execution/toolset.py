@@ -423,6 +423,13 @@ def _paper_position(value: PaperPosition) -> PaperPositionOutput:
 def _paper_account(value: PaperAccountState) -> PaperAccountStateOutput:
     positions = tuple(_paper_position(item) for item in value.positions[:_MAX_PAPER_POSITIONS])
     return PaperAccountStateOutput(
+        account_id=value.account_id,
+        runtime_mode=value.runtime_mode,
+        data_version=value.data_version,
+        currency=value.currency,
+        source_snapshot_id=value.source_snapshot_id,
+        source_snapshot_hash=value.source_snapshot_hash,
+        source_snapshot_as_of=value.source_snapshot_as_of,
         as_of=value.as_of,
         total_cash=value.total_cash,
         available_cash=value.available_cash,

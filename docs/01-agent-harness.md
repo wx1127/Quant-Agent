@@ -152,18 +152,26 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> RECEIVED
-    RECEIVED --> REJECTED: 权限或意图不允许
-    RECEIVED --> SNAPSHOT_READY: 权限通过
-    SNAPSHOT_READY --> DATA_INVALID: 数据校验失败
-    SNAPSHOT_READY --> ANALYZED: 计算完成
-    ANALYZED --> REJECTED: 证据不足
-    ANALYZED --> RISK_CHECKED: 进入风控
-    RISK_CHECKED --> REJECTED: 风控拒绝
-    RISK_CHECKED --> REPORTED: 仅研究或报告
-    RISK_CHECKED --> PENDING_APPROVAL: 实盘订单草案
+    RECEIVED --> SNAPSHOT_READY: 绑定不可变决策快照
+    SNAPSHOT_READY --> DATA_VALIDATED: 数据质量通过
+    SNAPSHOT_READY --> DATA_INVALID: 数据质量失败
+    DATA_VALIDATED --> ANALYZED: 研究或回测完成
+    ANALYZED --> REPORTED: 研究/回测报告
+    ANALYZED --> PORTFOLIO_READY: 目标组合完成
+    PORTFOLIO_READY --> RISK_CHECKED: 独立风控通过
+    PORTFOLIO_READY --> REJECTED: 风控拒绝
+    PORTFOLIO_READY --> DATA_INVALID: 风控计算失败关闭
+    RISK_CHECKED --> REPORTED: 组合报告
+    RISK_CHECKED --> DRAFT_READY: 锁定订单草案
+    DRAFT_READY --> REPORTED: 订单草案报告
+    DRAFT_READY --> EXECUTING: PAPER 自动进入模拟提交阶段
+    DRAFT_READY --> PENDING_APPROVAL: LIVE_ASSISTED 等待外部审批
     PENDING_APPROVAL --> EXPIRED: 审批超时
-    PENDING_APPROVAL --> EXECUTING: 人工批准
+    PENDING_APPROVAL --> REJECTED: 人工拒绝
+    PENDING_APPROVAL --> APPROVED: 哈希绑定的人工批准
+    APPROVED --> EXECUTING: 进入受控实盘提交阶段
     EXECUTING --> RECONCILING: 已提交
+    EXECUTING --> INCIDENT: 执行结果未知
     RECONCILING --> COMPLETED: 账实一致
     RECONCILING --> INCIDENT: 存在差异
     REPORTED --> [*]
@@ -173,6 +181,17 @@ stateDiagram-v2
     EXPIRED --> [*]
     INCIDENT --> [*]
 ```
+
+状态由可信运行时根据已经验证的工具响应推进，模型不能传入或选择下一状态。运行时在每次分发前
+同时检查服务端固定的运行模式、当前阶段工具白名单和前置制品哈希；非法调用同样消耗调用预算。
+执行前可以进入 `CANCELLED`、`TIMED_OUT`、`LIMIT_EXCEEDED` 或 `FAILED` 等明确终态，所有终态均为
+吸收态。订单可能已提交后，取消或总超时不能伪装成“未执行”：任务必须继续进入独立核对预算，
+无法确认结果时进入 `INCIDENT`。
+
+`PAPER` 不需要人工审批，但仍只能提交已通过风控且被运行时锁定的不可执行草案；
+`LIVE_ASSISTED` 必须由控制面调用 `record_external_approval()`，批准证据同时绑定 `decision_id`、
+草案 `batch_hash` 和有效期。底层工具注册器仍独立执行 capability、账户作用域、审计和一次性实盘
+授权校验，状态机不会替代这些权限边界。
 
 ## 8. 上下文与状态管理
 

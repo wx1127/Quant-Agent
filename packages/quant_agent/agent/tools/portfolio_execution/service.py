@@ -260,7 +260,11 @@ class PortfolioExecutionPipeline:
             frozen,
             account,
             target,
-            evaluated_at=draft_as_of,
+            # Risk is a decision-bound input, not a transport-time observation.
+            # Re-evaluate at the frozen decision boundary so the draft binds the
+            # exact result exposed by ``check_portfolio_risk`` instead of silently
+            # changing its hash merely because draft delivery happened later.
+            evaluated_at=frozen.as_of,
         )
         if not risk.allows_execution:
             raise PortfolioRiskBlocked(risk)

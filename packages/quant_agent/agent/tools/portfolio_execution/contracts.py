@@ -509,6 +509,13 @@ class PaperPositionOutput(ToolOutput):
 
 
 class PaperAccountStateOutput(ToolOutput):
+    account_id: Identifier
+    runtime_mode: RuntimeMode
+    data_version: Version
+    currency: Annotated[str, Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")]
+    source_snapshot_id: Identifier
+    source_snapshot_hash: Sha256
+    source_snapshot_as_of: datetime
     as_of: datetime
     total_cash: NonNegativeDecimal
     available_cash: NonNegativeDecimal
@@ -521,7 +528,7 @@ class PaperAccountStateOutput(ToolOutput):
     positions_truncated: bool
     positions: Annotated[tuple[PaperPositionOutput, ...], Field(max_length=500)]
 
-    _validate_as_of = field_validator("as_of")(_aware)
+    _validate_times = field_validator("source_snapshot_as_of", "as_of")(_aware)
 
     @model_validator(mode="after")
     def validate_position_count(self) -> Self:
@@ -531,6 +538,10 @@ class PaperAccountStateOutput(ToolOutput):
             raise ValueError("returned paper positions cannot exceed total positions")
         if self.positions_truncated != (self.returned_position_count < self.total_position_count):
             raise ValueError("paper positions_truncated does not match position counts")
+        if self.runtime_mode is not RuntimeMode.PAPER:
+            raise ValueError("paper account output requires PAPER runtime mode")
+        if self.source_snapshot_as_of > self.as_of:
+            raise ValueError("paper account source snapshot cannot be after its state")
         return self
 
 
@@ -591,6 +602,18 @@ class PaperExecutionOutput(_DecisionAccountOutput):
             raise ValueError("account_before_hash must bind account_before")
         if self.account_after_hash != self.account_after.state_hash:
             raise ValueError("account_after_hash must bind account_after")
+        for account in (self.account_before, self.account_after):
+            if (
+                account.account_id != self.account_id
+                or account.runtime_mode is not RuntimeMode.PAPER
+                or account.data_version != self.data_version
+                or account.source_snapshot_id != self.account_snapshot_id
+                or account.source_snapshot_hash != self.account_snapshot_hash
+                or account.source_snapshot_as_of != self.as_of
+            ):
+                raise ValueError("paper account state must bind the frozen decision snapshot")
+        if self.account_before.currency != self.account_after.currency:
+            raise ValueError("paper account currency cannot change during execution")
         return self
 
 
