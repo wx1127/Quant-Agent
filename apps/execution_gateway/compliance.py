@@ -43,3 +43,24 @@ class BrokerExecutionGate:
         if not self.checklist.live_ready():
             raise PermissionError("live execution compliance checklist is incomplete")
 
+
+@dataclass(frozen=True, slots=True)
+class SmallCapitalAcceptance:
+    capital: float
+    minimum_capital: float = 1000.0
+    max_position_fraction: float = 0.1
+    daily_loss_fraction: float = 0.02
+    kill_switch_ready: bool = False
+    rollback_ready: bool = False
+
+    def validate(self, proposed_position: float, daily_loss: float) -> None:
+        if self.capital < self.minimum_capital:
+            raise PermissionError("capital is below small-capital acceptance minimum")
+        if proposed_position < 0 or proposed_position > self.capital * self.max_position_fraction:
+            raise PermissionError("proposed position exceeds small-capital position limit")
+        if daily_loss > self.capital * self.daily_loss_fraction:
+            raise PermissionError("daily loss exceeds small-capital loss limit")
+        if not self.kill_switch_ready:
+            raise PermissionError("kill switch is not ready")
+        if not self.rollback_ready:
+            raise PermissionError("rollback is not ready")
