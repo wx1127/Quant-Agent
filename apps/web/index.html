@@ -10,6 +10,7 @@
   <header class="topbar"><div><span class="eyebrow">QUANT-AGENT / RESEARCH</span><h1>市场研究台</h1></div><label>API 地址 <input id="apiBase" value="http://localhost:8000/v1"></label><button id="refresh">刷新</button></header>
   <main>
     <section id="status" class="status">等待加载…</section>
+    <section class="grid metrics"><article><span>Tushare 数据源</span><strong id="sourceState">—</strong><small id="sourceMeta">—</small></article></section>
     <section class="grid metrics"><article><span>市场阶段</span><strong id="market">—</strong><small id="marketMeta">—</small></article><article><span>主线数量</span><strong id="mainlineCount">—</strong><small>当前快照</small></article><article><span>龙头数量</span><strong id="leaderCount">—</strong><small>当前快照</small></article><article><span>候选数量</span><strong id="candidateCount">—</strong><small>当前快照</small></article></section>
     <section class="grid columns"><article><div class="section-title"><h2>行业主线</h2><span id="mainlineMeta"></span></div><div id="mainlines" class="rows"></div></article><article><div class="section-title"><h2>风险提示</h2><span id="reportMeta"></span></div><ul id="risks" class="risks"></ul></article></section>
     <section class="grid columns"><article><div class="section-title"><h2>龙头</h2><span id="leadersMeta"></span></div><div id="leaders" class="rows"></div></article><article><div class="section-title"><h2>候选</h2><span id="candidatesMeta"></span></div><div id="candidates" class="rows"></div></article></section>

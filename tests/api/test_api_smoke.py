@@ -115,6 +115,7 @@ def test_tushare_status_reflects_adapter_readiness(monkeypatch) -> None:
     assert unavailable.status_code == 200
     assert unavailable.json()["configured"] is False
     assert unavailable.json()["research_provider_connected"] is False
+    assert unavailable.json()["research_cache_ttl_seconds"] == 30.0
 
     configured = TestClient(create_app(research_provider=InMemoryResearchProvider()))
     ready = configured.get("/v1/data/tushare-status", headers=headers)

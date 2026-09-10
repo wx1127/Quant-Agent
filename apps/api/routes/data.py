@@ -16,6 +16,10 @@ def build_data_router(research_provider: Any = None) -> APIRouter:
     async def tushare_status(principal: Principal = Depends(_principal)) -> dict[str, object]:  # noqa: B008
         del principal
         token = os.getenv("MARKET_DATA_TOKEN") or os.getenv("TUSHARE_TOKEN")
+        try:
+            cache_ttl = min(300.0, max(0.0, float(os.getenv("RESEARCH_CACHE_TTL_SECONDS", "30"))))
+        except ValueError:
+            cache_ttl = 30.0
         return {
             "provider": "tushare",
             "configured": bool(token),
@@ -23,6 +27,7 @@ def build_data_router(research_provider: Any = None) -> APIRouter:
             "sync_command": "quant-agent data sync --help",
             # This is adapter readiness, not a claim that Tushare is reachable.
             "research_provider_connected": research_provider is not None,
+            "research_cache_ttl_seconds": cache_ttl,
             "message": (
                 "token configured; run data sync before research queries"
                 if token
