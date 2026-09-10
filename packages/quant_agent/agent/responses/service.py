@@ -17,6 +17,7 @@ from quant_agent.agent.runtime import (
     AgentRunSnapshot,
     AgentRunState,
 )
+from quant_agent.agent.security.text import SensitiveOutputBlocked, SensitiveTextGuard
 from quant_agent.agent.snapshots import DecisionSnapshot
 from quant_agent.config import RuntimeMode
 from quant_agent.core.responses import ToolResponse
@@ -320,6 +321,13 @@ class AgentAnswerPublisher:
         if instant < decision.as_of:
             raise AgentAnswerPolicyViolation("answer cannot be generated before the data cutoff")
 
+        try:
+            SensitiveTextGuard().assert_safe(
+                draft,
+                protected_values=(decision.account_id, decision.account_snapshot_id),
+            )
+        except SensitiveOutputBlocked as error:
+            raise AgentAnswerPolicyViolation("answer contains sensitive output") from error
         _validate_language(draft)
         _validate_structure(draft)
         _validate_actions(draft, run)
