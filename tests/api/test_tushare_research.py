@@ -92,6 +92,21 @@ def test_tushare_research_provider_can_disable_cache() -> None:
     ]
 
 
+def test_tushare_provider_reads_bounded_cache_ttl(monkeypatch) -> None:
+    monkeypatch.setenv("MARKET_DATA_TOKEN", "test-token")
+    monkeypatch.setenv("RESEARCH_CACHE_TTL_SECONDS", "999")
+    bounded = TushareResearchProvider.from_env()
+    assert bounded is not None
+    assert bounded._cache_ttl_seconds == 300.0
+    bounded._provider.close()
+
+    monkeypatch.setenv("RESEARCH_CACHE_TTL_SECONDS", "invalid")
+    fallback = TushareResearchProvider.from_env()
+    assert fallback is not None
+    assert fallback._cache_ttl_seconds == 30.0
+    fallback._provider.close()
+
+
 class FailingResearchProvider:
     def get(self, kind: str, symbol: str | None = None) -> None:
         del kind, symbol

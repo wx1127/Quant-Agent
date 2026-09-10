@@ -48,7 +48,14 @@ class TushareResearchProvider:
     @classmethod
     def from_env(cls) -> TushareResearchProvider | None:
         token = os.getenv("MARKET_DATA_TOKEN") or os.getenv("TUSHARE_TOKEN")
-        return cls(TushareHttpProvider(token)) if token else None
+        if not token:
+            return None
+        raw_ttl = os.getenv("RESEARCH_CACHE_TTL_SECONDS", "30")
+        try:
+            ttl = min(300.0, max(0.0, float(raw_ttl)))
+        except ValueError:
+            ttl = 30.0
+        return cls(TushareHttpProvider(token), cache_ttl_seconds=ttl)
 
     def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
         cache_key = (kind, symbol)
