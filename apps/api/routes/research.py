@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from core.app import Principal, _principal
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,6 +21,7 @@ class ResearchResult(BaseModel):
     as_of: datetime
     data_version: str = Field(min_length=1)
     model_version: str = Field(min_length=1)
+    freshness: Literal["live", "cached"] = "live"
     items: tuple[dict[str, Any], ...] = ()
 
 
@@ -54,7 +55,7 @@ class TushareResearchProvider:
         cached = self._cache.get(cache_key)
         now = time.monotonic()
         if cached is not None and cached[0] > now:
-            return cached[1]
+            return cached[1].model_copy(update={"freshness": "cached"}) if cached[1] else None
         trade_date = self._latest_trade_date()
         if kind == "market":
             rows = self._rows("index_daily", {"ts_code": "000001.SH", "trade_date": trade_date})

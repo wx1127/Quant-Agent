@@ -58,12 +58,15 @@ def test_tushare_research_provider_uses_trade_date_and_sorts_leaders() -> None:
 
     assert result is not None
     assert result.data_version == "tushare-live"
+    assert result.freshness == "live"
     assert [item["ts_code"] for item in result.items] == ["000002.SZ", "000001.SZ"]
     assert fake.calls[0][0] == "trade_cal"
     assert fake.calls[1][0] == "daily"
     assert "pct_chg" in (fake.calls[1][2] or ())
 
-    provider.get("leaders")
+    cached = provider.get("leaders")
+    assert cached is not None
+    assert cached.freshness == "cached"
     assert len(fake.calls) == 2
 
 
