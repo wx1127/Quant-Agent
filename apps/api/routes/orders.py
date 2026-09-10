@@ -30,6 +30,11 @@ class ApprovalRequest(BaseModel):
     idempotency_key: str = Field(min_length=8)
 
 
+class PaperSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    approval_token: str = Field(min_length=1)
+
+
 class OrderService:
     def __init__(self, drafts: tuple[OrderDraft, ...] = ()) -> None:
         self._drafts = {draft.draft_id: draft for draft in drafts}
@@ -81,5 +86,14 @@ def build_orders_router(service: OrderService | None = None) -> APIRouter:
     ) -> OrderDraft:
         del principal
         return backend.approve(draft_id, request.idempotency_key)
+
+    @router.post("/drafts/{draft_id}/submit-paper", response_model=OrderDraft)
+    async def submit_paper(
+        draft_id: str,
+        request: PaperSubmitRequest,
+        principal: Principal = Depends(require_role("approver")),  # noqa: B008
+    ) -> OrderDraft:
+        del principal
+        return backend.submit_paper(draft_id, request.approval_token)
 
     return router
