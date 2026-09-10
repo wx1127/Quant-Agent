@@ -104,3 +104,19 @@ def test_api_golden_smoke_flow() -> None:
     )
     assert chat.status_code == 200
     assert chat.json()["requires_human_approval"] is True
+
+
+def test_tushare_status_reflects_adapter_readiness(monkeypatch) -> None:
+    monkeypatch.delenv("MARKET_DATA_TOKEN", raising=False)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    empty = TestClient(create_app())
+    headers = {"Authorization": "Bearer analyst:research"}
+    unavailable = empty.get("/v1/data/tushare-status", headers=headers)
+    assert unavailable.status_code == 200
+    assert unavailable.json()["configured"] is False
+    assert unavailable.json()["research_provider_connected"] is False
+
+    configured = TestClient(create_app(research_provider=InMemoryResearchProvider()))
+    ready = configured.get("/v1/data/tushare-status", headers=headers)
+    assert ready.status_code == 200
+    assert ready.json()["research_provider_connected"] is True
