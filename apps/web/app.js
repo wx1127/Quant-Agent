@@ -6,8 +6,9 @@ async function get(path) {
   if (!response.ok) throw new Error(`${response.status} ${path}`);
   return response.json();
 }
-function meta(result) { return `${result.as_of} · ${result.data_version} · ${result.model_version}`; }
-function rows(target, items) { $(target).innerHTML = items.length ? items.map(item => `<div class="row"><b>${item.symbol || item.name || item.industry || '—'}</b><em>${item.score ?? item.state ?? item.rank ?? ''}</em></div>`).join('') : '<div class="status">暂无数据</div>'; }
+function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
+function meta(result) { const freshness = result.freshness === 'cached' ? '缓存' : '实时'; return `${freshness} · ${result.as_of} · ${result.data_version} · ${result.model_version}`; }
+function rows(target, items) { $(target).innerHTML = items.length ? items.map(item => `<div class="row"><b>${escapeHtml(item.symbol || item.name || item.industry || '—')}</b><em>${escapeHtml(item.score ?? item.state ?? item.rank ?? '')}</em></div>`).join('') : '<div class="status">暂无数据</div>'; }
 async function refresh() {
   $('status').textContent = '正在读取研究快照…';
   try {
