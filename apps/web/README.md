@@ -11,3 +11,5 @@ python -m http.server 5173
 
 P7-T07 操作台位于 `operations.html`，用于创建回测、审批订单草案和 Paper 提交。它不会直接执行真实交易。
 
+P7-T08 对话入口位于 `chat.html`，响应包含决策 ID、数据版本和人工审批标记。
+
