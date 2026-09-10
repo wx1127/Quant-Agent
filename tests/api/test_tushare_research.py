@@ -74,6 +74,21 @@ def test_tushare_research_provider_reads_market_index() -> None:
     assert result.items[0]["ts_code"] == "000001.SH"
 
 
+def test_tushare_research_provider_can_disable_cache() -> None:
+    fake = FakeTushare()
+    provider = TushareResearchProvider(fake, cache_ttl_seconds=0)
+
+    provider.get("market")
+    provider.get("market")
+
+    assert [call[0] for call in fake.calls] == [
+        "trade_cal",
+        "index_daily",
+        "trade_cal",
+        "index_daily",
+    ]
+
+
 class FailingResearchProvider:
     def get(self, kind: str, symbol: str | None = None) -> None:
         del kind, symbol
