@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request,
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from .metrics import metrics, timer
+
 request_id_context: ContextVar[str] = ContextVar("request_id", default="")
 
 
@@ -58,6 +60,7 @@ def create_app(
 
     @app.middleware("http")
     async def correlation(request: Request, call_next):  # type: ignore[no-untyped-def]
+        started = timer()
         supplied = request.headers.get("X-Request-ID")
         try:
             request_id = str(UUID(supplied)) if supplied else str(uuid4())
@@ -67,6 +70,7 @@ def create_app(
         try:
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
+            metrics.observe_request(timer() - started, response.status_code >= 500)
             return response
         finally:
             request_id_context.reset(token)
@@ -84,6 +88,10 @@ def create_app(
     @router.get("/health", dependencies=[Depends(_principal)])
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": app.version, "request_id": request_id_context.get()}
+
+    @router.get("/metrics", dependencies=[Depends(require_role("admin"))])
+    async def metrics_endpoint() -> dict[str, float | int]:
+        return metrics.snapshot()
 
     @router.get("/admin/ping", dependencies=[Depends(require_role("admin"))])
     async def admin_ping() -> dict[str, str]:
