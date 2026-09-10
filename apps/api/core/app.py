@@ -131,7 +131,7 @@ def create_app(
         live_provider = research_provider or TushareResearchProvider.from_env()
         app.include_router(build_research_router(live_provider), prefix="/v1")
         app.include_router(build_backtest_portfolio_router(backtest_service), prefix="/v1")
-        app.include_router(build_data_router(), prefix="/v1")
+        app.include_router(build_data_router(live_provider), prefix="/v1")
         app.include_router(build_agent_router(), prefix="/v1")
         app.include_router(build_orders_router(orders_service), prefix="/v1")
         app.include_router(build_reports_router(report_provider), prefix="/v1")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 
 from core.app import Principal, _principal
@@ -62,7 +62,7 @@ class TushareResearchProvider:
             "trade_cal",
             {
                 "exchange": "SSE",
-                "start_date": (today.replace(day=max(1, today.day - 10))).strftime("%Y%m%d"),
+                "start_date": (today - timedelta(days=14)).strftime("%Y%m%d"),
                 "end_date": today.strftime("%Y%m%d"),
             },
         )
