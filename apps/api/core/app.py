@@ -47,7 +47,7 @@ def require_role(role: str):
     return dependency
 
 
-def create_app() -> FastAPI:
+def create_app(research_provider=None) -> FastAPI:  # type: ignore[no-untyped-def]
     app = FastAPI(title="Quant-Agent API", version="1.0.0")
     router = APIRouter(prefix="/v1")
 
@@ -88,7 +88,7 @@ def create_app() -> FastAPI:
     try:
         from routes.research import build_research_router
 
-        app.include_router(build_research_router(), prefix="/v1")
+        app.include_router(build_research_router(research_provider), prefix="/v1")
     except ModuleNotFoundError:
         pass
     return app

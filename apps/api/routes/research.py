@@ -29,6 +29,31 @@ class EmptyResearchProvider:
         return None
 
 
+class InMemoryResearchProvider:
+    """Deterministic provider for local runs and contract tests.
+
+    Production adapters can implement the same protocol against frozen snapshots
+    without changing the HTTP layer.
+    """
+
+    def __init__(self, results: tuple[ResearchResult, ...] = ()) -> None:
+        self._results = {
+            (result.kind, item.get("symbol")): result
+            for result in results
+            for item in result.items
+        }
+        self._by_kind = {result.kind: result for result in results}
+
+    def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
+        if symbol is None:
+            return self._by_kind.get(kind)
+        result = self._results.get((kind, symbol)) or self._by_kind.get("stock")
+        if result is None:
+            return None
+        items = tuple(item for item in result.items if item.get("symbol") == symbol)
+        return result.model_copy(update={"items": items})
+
+
 def build_research_router(provider: ResearchProvider | None = None) -> APIRouter:
     source = provider or EmptyResearchProvider()
     router = APIRouter(prefix="/research", tags=["research"])
