@@ -10,6 +10,7 @@ from core.app import Principal, _principal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from quant_agent.data.providers.base import ProviderError
 from quant_agent.data.providers.tushare import TushareHttpProvider
 
 
@@ -128,7 +129,15 @@ def build_research_router(provider: ResearchProvider | None = None) -> APIRouter
 
     def read(kind: str, symbol: str | None, principal: Principal) -> ResearchResult:
         del principal
-        result = source.get(kind, symbol)
+        try:
+            result = source.get(kind, symbol)
+        except ProviderError as error:
+            # Keep provider details in server logs only; never expose response text
+            # or credentials through the public API error body.
+            raise HTTPException(
+                status_code=503,
+                detail=f"research data source unavailable: {error.provider}",
+            ) from error
         if result is None:
             raise HTTPException(status_code=404, detail=f"research data unavailable: {kind}")
         return result

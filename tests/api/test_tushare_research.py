@@ -1,7 +1,10 @@
 from typing import Any
 
-from core.app import create_app  # noqa: F401  # initialize app import order
+from core.app import create_app  # initialize app import order
+from fastapi.testclient import TestClient
 from routes.research import TushareResearchProvider
+
+from quant_agent.data.providers.base import ProviderError
 
 
 class FakeTushare:
@@ -66,3 +69,22 @@ def test_tushare_research_provider_reads_market_index() -> None:
 
     assert result is not None
     assert result.items[0]["ts_code"] == "000001.SH"
+
+
+class FailingResearchProvider:
+    def get(self, kind: str, symbol: str | None = None) -> None:
+        del kind, symbol
+        raise ProviderError("tushare", "daily", "token=should-not-escape", retryable=False)
+
+
+def test_provider_error_is_redacted_at_api_boundary() -> None:
+    client = TestClient(create_app(research_provider=FailingResearchProvider()))
+    response = client.get(
+        "/v1/research/market",
+        headers={"Authorization": "Bearer analyst:research"},
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["message"] == "research data source unavailable: tushare"
+    assert "should-not-escape" not in response.text
