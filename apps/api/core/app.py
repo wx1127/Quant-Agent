@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request,
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from .alerts import evaluate_alerts
 from .metrics import metrics, timer
 
 request_id_context: ContextVar[str] = ContextVar("request_id", default="")
@@ -92,6 +93,19 @@ def create_app(
     @router.get("/metrics", dependencies=[Depends(require_role("admin"))])
     async def metrics_endpoint() -> dict[str, float | int]:
         return metrics.snapshot()
+
+    @router.get("/alerts", dependencies=[Depends(require_role("admin"))])
+    async def alerts_endpoint() -> list[dict[str, str]]:
+        snapshot = metrics.snapshot()
+        alerts = evaluate_alerts(
+            requests=int(snapshot["api_requests_total"]),
+            errors=int(snapshot["api_errors_total"]),
+            average_seconds=float(snapshot["api_request_seconds_average"]),
+        )
+        return [
+            {"code": alert.code, "severity": alert.severity.value, "message": alert.message}
+            for alert in alerts
+        ]
 
     @router.get("/admin/ping", dependencies=[Depends(require_role("admin"))])
     async def admin_ping() -> dict[str, str]:
