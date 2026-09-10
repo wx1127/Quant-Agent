@@ -1821,3 +1821,5 @@ flowchart LR
 - 在真实部署环境执行长期影子运行和模拟盘验证；
 - 完成券商沙盒联调、账户授权和合规确认；
 - 在所有外部条件满足前，保持 `LIVE` 执行门禁关闭。
+
+生产就绪验收清单见 [`docs/production-readiness.md`](production-readiness.md)。
