@@ -27,7 +27,10 @@ class Principal(BaseModel):
 
 def _principal(authorization: str | None = Header(default=None)) -> Principal:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="authentication required",
+        )
     token = authorization.removeprefix("Bearer ").strip()
     if not token or ":" not in token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid bearer token")
@@ -36,7 +39,7 @@ def _principal(authorization: str | None = Header(default=None)) -> Principal:
 
 
 def require_role(role: str):
-    def dependency(principal: Principal = Depends(_principal)) -> Principal:
+    def dependency(principal: Principal = Depends(_principal)) -> Principal:  # noqa: B008
         if role not in principal.roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role")
         return principal
@@ -66,7 +69,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException):  # type: ignore[no-untyped-def]
         del request
-        payload = ApiError(code=f"HTTP_{exc.status_code}", message=str(exc.detail), request_id=request_id_context.get())
+        payload = ApiError(
+            code=f"HTTP_{exc.status_code}",
+            message=str(exc.detail),
+            request_id=request_id_context.get(),
+        )
         return JSONResponse(status_code=exc.status_code, content=payload.model_dump())
 
     @router.get("/health", dependencies=[Depends(_principal)])
@@ -78,6 +85,12 @@ def create_app() -> FastAPI:
         return {"status": "ok", "role": "admin", "request_id": request_id_context.get()}
 
     app.include_router(router)
+    try:
+        from routes.research import build_research_router
+
+        app.include_router(build_research_router(), prefix="/v1")
+    except ModuleNotFoundError:
+        pass
     return app
 
 
