@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
 from core.app import Principal, _principal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+
+from quant_agent.data.providers.tushare import TushareHttpProvider
 
 
 class ResearchResult(BaseModel):
@@ -27,6 +30,47 @@ class EmptyResearchProvider:
     def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
         del kind, symbol
         return None
+
+
+class TushareResearchProvider:
+    """Read-only live adapter over the existing Tushare HTTP boundary."""
+
+    def __init__(self, provider: TushareHttpProvider) -> None:
+        self._provider = provider
+
+    @classmethod
+    def from_env(cls) -> TushareResearchProvider | None:
+        token = os.getenv("MARKET_DATA_TOKEN") or os.getenv("TUSHARE_TOKEN")
+        return cls(TushareHttpProvider(token)) if token else None
+
+    def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
+        trade_date = date.today().strftime("%Y%m%d")
+        if kind == "market":
+            rows = self._rows("index_daily", {"ts_code": "000001.SH", "trade_date": trade_date})
+        elif kind in {"leaders", "candidates"}:
+            rows = self._rows("daily", {"trade_date": trade_date})
+            rows = sorted(rows, key=lambda row: float(row.get("pct_chg") or 0), reverse=True)[:20]
+        elif kind == "stock" and symbol:
+            rows = self._rows("daily", {"ts_code": symbol, "trade_date": trade_date})
+        else:
+            return None
+        return self._result(kind, rows)
+
+    def _rows(self, endpoint: str, params: dict[str, str]) -> tuple[dict[str, Any], ...]:
+        payload = self._provider.fetch_raw_json(endpoint, params)
+        return self._provider.decode_raw_rows(payload, endpoint=endpoint)
+
+    @staticmethod
+    def _result(kind: str, rows: tuple[dict[str, Any], ...]) -> ResearchResult | None:
+        if not rows:
+            return None
+        return ResearchResult(
+            kind=kind,
+            as_of=datetime.now(UTC),
+            data_version="tushare-live",
+            model_version="raw-provider-v1",
+            items=rows,
+        )
 
 
 class InMemoryResearchProvider:

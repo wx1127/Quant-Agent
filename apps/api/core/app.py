@@ -126,9 +126,10 @@ def create_app(
         from routes.data import build_data_router
         from routes.orders import build_orders_router
         from routes.reports import build_reports_router
-        from routes.research import build_research_router
+        from routes.research import TushareResearchProvider, build_research_router
 
-        app.include_router(build_research_router(research_provider), prefix="/v1")
+        live_provider = research_provider or TushareResearchProvider.from_env()
+        app.include_router(build_research_router(live_provider), prefix="/v1")
         app.include_router(build_backtest_portfolio_router(backtest_service), prefix="/v1")
         app.include_router(build_data_router(), prefix="/v1")
         app.include_router(build_agent_router(), prefix="/v1")
