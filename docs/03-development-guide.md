@@ -639,21 +639,41 @@ wrapper 通过可信 `ResearchInputSource` 接入已有引擎：市场阶段和�
 
 ### 14.3 结构化输出
 
-Agent 最终输出模型：
+P6-T06 将模型草稿和可信发布结果分开。模型只能创建 `AgentAnswerDraft` 中的叙述、事实、推断、
+反对证据、风险、失效条件与非执行动作；`AgentAnswerPublisher` 从已验证的决策快照和 Agent 运行
+快照注入 `run_id`、`decision_id`、模式、目标、状态及数据截止时间，模型不能覆盖这些字段。
 
 ```python
-class AgentAnswer(BaseModel):
-    decision_id: str | None
-    as_of: datetime | None
-    answer_type: str
+class AgentAnswerDraft(BaseModel):
     summary: str
-    facts: list[Fact]
-    inferences: list[Inference]
-    counter_evidence: list[Evidence]
-    risks: list[RiskWarning]
-    actions: list[AllowedAction]
-    data_versions: list[str]
+    facts: tuple[AgentFact, ...]
+    inferences: tuple[AgentInference, ...]
+    counter_evidence: tuple[AgentCounterEvidence, ...]
+    risks: tuple[AgentRiskWarning, ...]
+    invalidations: tuple[AgentInvalidationCondition, ...]
+    actions: tuple[AgentAllowedAction, ...]
+
+class AgentAnswer(BaseModel):
+    run_id: str
+    decision_id: str
+    decision_snapshot_hash: str
+    runtime_mode: RuntimeMode
+    goal: AgentRunGoal
+    status: AgentAnswerStatus
+    as_of: datetime
+    generated_at: datetime
+    # 已验证的草稿字段、工具问题、数据版本和 answer_hash
 ```
+
+每个 `EvidenceReference` 同时绑定运行时 `request_id`/工具名、完整响应哈希、`/data` 下的
+RFC 6901 路径、该路径值的哈希和不可变数据版本。发布时必须在运行事件链中找到对应的成功或
+重放事件，再用应用层保留的完整工具响应复核决策、时点、版本、响应哈希和路径值。所有数字通过
+`AgentMetric` 输出，显示值必须和引用路径中的数值标量完全相等；叙述正文不允许出现裸数字。
+
+没有证据或证据不匹配时固定降级为 `INSUFFICIENT_EVIDENCE`/`NO_ACTION`，并丢弃未验证结论；
+工具警告和错误代码自动进入最终答案。保证性表述经过 Unicode 归一化后检查，空格或零宽字符不能
+绕过“稳赚”“确定上涨”“必买”等规则。每项推断都必须引用事实，并具备覆盖该推断的反对证据、
+风险和失效条件。完整工具响应的跨进程持久化与脱敏仍由 P6-T09 负责。
 
 ## 15. API 设计
 
