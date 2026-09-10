@@ -48,6 +48,15 @@ class PortfolioProposal(BaseModel):
     executable: bool = False
 
 
+class ProposalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    strategy_id: str = Field(min_length=1)
+    strategy_version: str = Field(min_length=1)
+    as_of: datetime
+    risk_status: str = Field(min_length=1)
+    positions: tuple[dict[str, object], ...] = ()
+
+
 class BacktestPortfolioService:
     def __init__(self, published_strategies: frozenset[tuple[str, str]] = frozenset()) -> None:
         self._published = published_strategies
@@ -74,6 +83,25 @@ class BacktestPortfolioService:
         if task is None:
             raise HTTPException(status_code=404, detail="backtest task not found")
         return task
+
+    def complete(self, task_id: str, result: dict[str, object]) -> BacktestTask:
+        task = self.get_task(task_id)
+        updated = task.model_copy(update={"status": TaskStatus.SUCCEEDED, "result": result})
+        self._tasks[task_id] = updated
+        return updated
+
+    def create_proposal(self, request: ProposalRequest) -> PortfolioProposal:
+        if (request.strategy_id, request.strategy_version) not in self._published:
+            raise HTTPException(status_code=422, detail="strategy is not published")
+        proposal = PortfolioProposal(
+            proposal_id=str(uuid4()),
+            as_of=request.as_of,
+            strategy_id=request.strategy_id,
+            strategy_version=request.strategy_version,
+            risk_status=request.risk_status,
+            positions=request.positions,
+        )
+        return self.add_proposal(proposal)
 
     def add_proposal(self, proposal: PortfolioProposal) -> PortfolioProposal:
         self._proposals[proposal.proposal_id] = proposal
@@ -113,5 +141,13 @@ def build_backtest_portfolio_router(service: BacktestPortfolioService | None = N
     ) -> PortfolioProposal:
         del principal
         return backend.get_proposal(proposal_id)
+
+    @router.post("/proposals", response_model=PortfolioProposal, status_code=201)
+    async def create_proposal(
+        request: ProposalRequest,
+        principal: Principal = Depends(_principal),  # noqa: B008
+    ) -> PortfolioProposal:
+        del principal
+        return backend.create_proposal(request)
 
     return router
