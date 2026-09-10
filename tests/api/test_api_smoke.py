@@ -121,3 +121,10 @@ def test_tushare_status_reflects_adapter_readiness(monkeypatch) -> None:
     ready = configured.get("/v1/data/tushare-status", headers=headers)
     assert ready.status_code == 200
     assert ready.json()["research_provider_connected"] is True
+
+    monkeypatch.setenv("RESEARCH_CACHE_TTL_SECONDS", "999")
+    capped = TestClient(create_app()).get("/v1/data/tushare-status", headers=headers)
+    assert capped.json()["research_cache_ttl_seconds"] == 300.0
+    monkeypatch.setenv("RESEARCH_CACHE_TTL_SECONDS", "invalid")
+    fallback = TestClient(create_app()).get("/v1/data/tushare-status", headers=headers)
+    assert fallback.json()["research_cache_ttl_seconds"] == 30.0
