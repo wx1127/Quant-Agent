@@ -63,6 +63,9 @@ def test_tushare_research_provider_uses_trade_date_and_sorts_leaders() -> None:
     assert fake.calls[1][0] == "daily"
     assert "pct_chg" in (fake.calls[1][2] or ())
 
+    provider.get("leaders")
+    assert len(fake.calls) == 2
+
 
 def test_tushare_research_provider_reads_market_index() -> None:
     result = TushareResearchProvider(FakeTushare()).get("market")  # type: ignore[arg-type]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 
@@ -36,8 +37,12 @@ class EmptyResearchProvider:
 class TushareResearchProvider:
     """Read-only live adapter over the existing Tushare HTTP boundary."""
 
-    def __init__(self, provider: TushareHttpProvider) -> None:
+    def __init__(self, provider: TushareHttpProvider, *, cache_ttl_seconds: float = 30.0) -> None:
+        if cache_ttl_seconds < 0:
+            raise ValueError("cache_ttl_seconds cannot be negative")
         self._provider = provider
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._cache: dict[tuple[str, str | None], tuple[float, ResearchResult | None]] = {}
 
     @classmethod
     def from_env(cls) -> TushareResearchProvider | None:
@@ -45,6 +50,11 @@ class TushareResearchProvider:
         return cls(TushareHttpProvider(token)) if token else None
 
     def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
+        cache_key = (kind, symbol)
+        cached = self._cache.get(cache_key)
+        now = time.monotonic()
+        if cached is not None and cached[0] > now:
+            return cached[1]
         trade_date = self._latest_trade_date()
         if kind == "market":
             rows = self._rows("index_daily", {"ts_code": "000001.SH", "trade_date": trade_date})
@@ -58,8 +68,11 @@ class TushareResearchProvider:
         elif kind == "stock" and symbol:
             rows = self._rows("daily", {"ts_code": symbol, "trade_date": trade_date})
         else:
-            return None
-        return self._result(kind, rows)
+            result = None
+        if kind in {"market", "leaders", "candidates"} or (kind == "stock" and symbol):
+            result = self._result(kind, rows)
+        self._cache[cache_key] = (now + self._cache_ttl_seconds, result)
+        return result
 
     def _latest_trade_date(self) -> str:
         today = date.today()
