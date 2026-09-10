@@ -115,12 +115,14 @@ def create_app(
     try:
         from routes.agent import build_agent_router
         from routes.backtest_portfolio import build_backtest_portfolio_router
+        from routes.data import build_data_router
         from routes.orders import build_orders_router
         from routes.reports import build_reports_router
         from routes.research import build_research_router
 
         app.include_router(build_research_router(research_provider), prefix="/v1")
         app.include_router(build_backtest_portfolio_router(backtest_service), prefix="/v1")
+        app.include_router(build_data_router(), prefix="/v1")
         app.include_router(build_agent_router(), prefix="/v1")
         app.include_router(build_orders_router(orders_service), prefix="/v1")
         app.include_router(build_reports_router(report_provider), prefix="/v1")

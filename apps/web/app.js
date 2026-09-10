@@ -17,6 +17,6 @@ async function refresh() {
     $('mainlineMeta').textContent = meta(mainlines); $('leadersMeta').textContent = meta(leaders); $('candidatesMeta').textContent = meta(candidates);
     rows('mainlines', mainlines.items); rows('leaders', leaders.items); rows('candidates', candidates.items);
     $('status').textContent = '研究快照加载完成';
-  } catch (error) { $('status').textContent = `加载失败：${error.message}。请确认 API 地址、认证和数据快照。`; }
+  } catch (error) { try { const source = await get('/data/tushare-status'); $('status').textContent = `暂无研究快照：${source.message}。请先执行数据同步。`; } catch (_) { $('status').textContent = `加载失败：${error.message}。请确认 API 地址、认证和数据快照。`; } }
 }
 $('refresh').addEventListener('click', refresh); refresh();
