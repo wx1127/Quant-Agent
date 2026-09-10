@@ -13,7 +13,12 @@ function renderSourceStatus(source) {
   $('sourceMeta').textContent = `${tokenState} · 缓存 ${ttl}s`;
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
-function meta(result) { const freshness = result.freshness === 'cached' ? '缓存' : '实时'; return `${freshness} · ${result.as_of} · ${result.data_version} · ${result.model_version}`; }
+function meta(result) {
+  const freshness = result.freshness === 'cached' ? '缓存' : '实时';
+  const tradeDate = result.items?.find(item => item.trade_date)?.trade_date;
+  const dateLabel = tradeDate ? `交易日 ${tradeDate}` : `生成 ${result.as_of}`;
+  return `${freshness} · ${dateLabel} · ${result.data_version} · ${result.model_version}`;
+}
 function rows(target, items) { $(target).innerHTML = items.length ? items.map(item => `<div class="row"><b>${escapeHtml(item.symbol || item.name || item.industry || '—')}</b><em>${escapeHtml(item.score ?? item.state ?? item.rank ?? '')}</em></div>`).join('') : '<div class="status">暂无数据</div>'; }
 async function refresh() {
   $('status').textContent = '正在读取研究快照…';
