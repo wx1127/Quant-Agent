@@ -44,7 +44,7 @@ class TushareResearchProvider:
         return cls(TushareHttpProvider(token)) if token else None
 
     def get(self, kind: str, symbol: str | None = None) -> ResearchResult | None:
-        trade_date = date.today().strftime("%Y%m%d")
+        trade_date = self._latest_trade_date()
         if kind == "market":
             rows = self._rows("index_daily", {"ts_code": "000001.SH", "trade_date": trade_date})
         elif kind in {"leaders", "candidates"}:
@@ -55,6 +55,20 @@ class TushareResearchProvider:
         else:
             return None
         return self._result(kind, rows)
+
+    def _latest_trade_date(self) -> str:
+        today = date.today()
+        payload = self._provider.fetch_raw_json(
+            "trade_cal",
+            {
+                "exchange": "SSE",
+                "start_date": (today.replace(day=max(1, today.day - 10))).strftime("%Y%m%d"),
+                "end_date": today.strftime("%Y%m%d"),
+            },
+        )
+        rows = self._provider.decode_raw_rows(payload, endpoint="trade_cal")
+        open_days = [str(row["cal_date"]) for row in rows if str(row.get("is_open")) == "1"]
+        return max(open_days) if open_days else today.strftime("%Y%m%d")
 
     def _rows(self, endpoint: str, params: dict[str, str]) -> tuple[dict[str, Any], ...]:
         payload = self._provider.fetch_raw_json(endpoint, params)
